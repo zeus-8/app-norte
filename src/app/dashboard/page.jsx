@@ -19,7 +19,11 @@ import {
   ArrowRight, 
   CheckCircle2, 
   Clock,
-  Sparkles
+  Sparkles,
+  Home,
+  Users,
+  Check,
+  X
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -35,6 +39,8 @@ export default function DashboardPage() {
   const [vehicleData, setVehicleData] = useState(null);
   const [expensesData, setExpensesData] = useState(null);
   const [dailyLogsData, setDailyLogsData] = useState(null);
+  const [householdData, setHouseholdData] = useState(null);
+  const [invitationMessage, setInvitationMessage] = useState('');
   const [loading, setLoading] = useState(true);
 
   // Modales
@@ -58,17 +64,19 @@ export default function DashboardPage() {
   const refreshData = useCallback(async () => {
     try {
       setLoading(true);
-      const [sumRes, vehRes, expRes, logsRes] = await Promise.all([
+      const [sumRes, vehRes, expRes, logsRes, houseRes] = await Promise.all([
         fetch(`/api/summary?month=${currentMonth}`).then(r => r.json()),
         fetch('/api/vehicle-maintenance').then(r => r.json()),
         fetch(`/api/expenses?month=${currentMonth}`).then(r => r.json()),
         fetch(`/api/daily-logs?month=${currentMonth}`).then(r => r.json()),
+        fetch('/api/household').then(r => r.json()).catch(() => null),
       ]);
 
       setSummaryData(sumRes);
       setVehicleData(vehRes);
       setExpensesData(expRes);
       setDailyLogsData(logsRes);
+      if (houseRes) setHouseholdData(houseRes);
     } catch (err) {
       console.error('Error cargando datos:', err);
     } finally {
@@ -79,6 +87,24 @@ export default function DashboardPage() {
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  const handleRespondInvitation = async (householdId, action) => {
+    try {
+      const res = await fetch('/api/household/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ householdId, action }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setInvitationMessage(data.message);
+        await refreshData();
+        setTimeout(() => setInvitationMessage(''), 4000);
+      }
+    } catch (err) {
+      console.error('Error al responder invitación:', err);
+    }
+  };
 
   // Handlers
   const handleSaveDailyLog = async (data) => {
@@ -160,6 +186,58 @@ export default function DashboardPage() {
         onOpenOdometerModal={() => setOdometerModalOpen(true)}
       />
 
+      {/* Notificación de acción de invitación */}
+      {invitationMessage && (
+        <div className="card" style={{ padding: '12px 16px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--accent-emerald)', color: '#34d399', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <CheckCircle2 size={18} />
+          <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{invitationMessage}</span>
+        </div>
+      )}
+
+      {/* Banner de Invitación Pendiente de Hogar */}
+      {householdData?.pendingInvitations?.length > 0 && (
+        <div className="card" style={{ marginBottom: 20, background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%)', border: '1px solid rgba(245, 158, 11, 0.4)', padding: '16px 20px' }}>
+          {householdData.pendingInvitations.map(inv => (
+            <div key={inv.membershipId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-md)', background: 'rgba(245, 158, 11, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fbbf24' }}>
+                  <Home size={22} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fbbf24' }}>
+                    ¡Invitación para compartir gastos de hogar en &quot;{inv.householdName}&quot;!
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-main)' }}>
+                    Tu porcentaje de cobertura será del <strong>{Number(inv.defaultSharePct)}%</strong>. Al aceptar, verás los gastos compartidos en tu panel.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => handleRespondInvitation(inv.householdId, 'accept')}
+                  className="btn btn-primary btn-sm"
+                  style={{ background: '#10b981', borderColor: '#10b981' }}
+                >
+                  <Check size={14} />
+                  <span>Aceptar y Vincular</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRespondInvitation(inv.householdId, 'decline')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ color: '#f87171' }}
+                >
+                  <X size={14} />
+                  <span>Rechazar</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Grid de KPIs Principales */}
       <div className="grid-kpis">
         <div className="kpi-card emerald">
@@ -183,12 +261,16 @@ export default function DashboardPage() {
             <div style={{ color: '#fb7185' }}><Receipt size={20} /></div>
           </div>
           <div className="kpi-value font-mono text-rose">
-            ${(obligations.totalUserObligations || obligations.totalJuanObligations || 0).toLocaleString()}
+            ${(obligations.totalUserObligations || obligations.totalObligations || expensesData?.summary?.totalUserMonthlyTarget || 0).toLocaleString()}
           </div>
           <div className="kpi-subtext">
-            <span>Fijos: ${(obligations.userFixedObligations || obligations.juanFixedObligations || 0).toLocaleString()}</span>
+            <span style={{ color: '#34d399' }}>
+              ✅ Pagado: ${(expensesData?.summary?.totalPaidAmount || obligations.totalPaidObligations || 0).toLocaleString()}
+            </span>
             <span>•</span>
-            <span>Cuotas: ${(obligations.userInstallmentObligations || obligations.juanInstallmentObligations || 0).toLocaleString()}</span>
+            <span style={{ color: '#fb7185' }}>
+              ⏳ Pendiente: ${(expensesData?.summary?.totalPendingAmount !== undefined ? expensesData.summary.totalPendingAmount : (obligations.totalPendingObligations || 0)).toLocaleString()}
+            </span>
           </div>
         </div>
 
@@ -197,11 +279,11 @@ export default function DashboardPage() {
             <span className="kpi-label">Balance Neto vs Gastos</span>
             <div style={{ color: '#fbbf24' }}><TrendingUp size={20} /></div>
           </div>
-          <div className="kpi-value font-mono" style={{ color: ((earnings.netIncome || 0) - (obligations.totalUserObligations || obligations.totalJuanObligations || 0)) >= 0 ? '#34d399' : '#f87171' }}>
-            ${((earnings.netIncome || 0) - (obligations.totalUserObligations || obligations.totalJuanObligations || 0)).toLocaleString()}
+          <div className="kpi-value font-mono" style={{ color: ((earnings.netIncome || 0) - (obligations.totalUserObligations || obligations.totalObligations || expensesData?.summary?.totalUserMonthlyTarget || 0)) >= 0 ? '#34d399' : '#f87171' }}>
+            ${((earnings.netIncome || 0) - (obligations.totalUserObligations || obligations.totalObligations || expensesData?.summary?.totalUserMonthlyTarget || 0)).toLocaleString()}
           </div>
           <div className="kpi-subtext">
-            {(earnings.netIncome || 0) >= (obligations.totalUserObligations || obligations.totalJuanObligations || 0)
+            {(earnings.netIncome || 0) >= (obligations.totalUserObligations || obligations.totalObligations || expensesData?.summary?.totalUserMonthlyTarget || 0)
               ? '✅ Cubriendo todas tus obligaciones'
               : '⚠️ Aún faltan ingresos para cubrir gastos'}
           </div>

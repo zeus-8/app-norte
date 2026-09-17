@@ -1,6 +1,6 @@
 import { db } from '@/db/index.js';
-import { dailyLogs, expenses, vehicleMaintenance, userSettings, users } from '@/db/schema.js';
-import { eq, and, sql, ne } from 'drizzle-orm';
+import { dailyLogs, expenses, vehicleMaintenance, userSettings, users, households, householdMembers, expensePayments } from '@/db/schema.js';
+import { eq, and, sql, ne, or, inArray } from 'drizzle-orm';
 
 function getMonthDiff(startStr, currentStr) {
   const [startY, startM] = startStr.split('-').map(Number);
@@ -99,39 +99,122 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
   const netIncome = grossIncome - fuelExpense - otherExpense;
   const daysWorked = logs.length;
 
-  // 2. Gastos
-  const allExpenses = await db.query.expenses.findMany({
-    where: and(
-      eq(expenses.userId, userId),
-      ne(expenses.status, 'cancelled')
-    ),
+  // 2. Obtener membresías de Hogar Compartido activas
+  const memberships = await db
+    .select()
+    .from(householdMembers)
+    .where(
+      and(
+        eq(householdMembers.userId, userId),
+        eq(householdMembers.status, 'accepted')
+      )
+    );
+
+  const householdMap = {};
+  const householdIds = [];
+  memberships.forEach(m => {
+    householdMap[m.householdId] = Number(m.defaultSharePct) || 50;
+    householdIds.push(m.householdId);
+  });
+
+  // 3. Obtener gastos personales y compartidos del hogar
+  let allExpenses = [];
+  if (householdIds.length > 0) {
+    allExpenses = await db.query.expenses.findMany({
+      where: and(
+        ne(expenses.status, 'cancelled'),
+        or(
+          eq(expenses.userId, userId),
+          inArray(expenses.householdId, householdIds)
+        )
+      ),
+    });
+  } else {
+    allExpenses = await db.query.expenses.findMany({
+      where: and(
+        eq(expenses.userId, userId),
+        ne(expenses.status, 'cancelled')
+      ),
+    });
+  }
+
+  // 4. Checklist de Pagos del mes
+  const payments = await db
+    .select()
+    .from(expensePayments)
+    .where(
+      and(
+        eq(expensePayments.userId, userId),
+        eq(expensePayments.month, targetMonth)
+      )
+    );
+
+  const paymentsMap = {};
+  payments.forEach(p => {
+    paymentsMap[p.expenseId] = Boolean(p.isPaid);
   });
 
   let fixedExpensesUserShare = 0;
   let installmentsUserShare = 0;
   let oneTimeUserShare = 0;
+  let totalPaidObligations = 0;
+  const expensesBreakdown = [];
 
   for (const exp of allExpenses) {
     let isApplicable = false;
-    if (exp.type === 'fixed' && targetMonth >= exp.startMonth) isApplicable = true;
-    if (exp.type === 'one_time' && targetMonth === exp.startMonth) isApplicable = true;
-    if (exp.type === 'installment') {
+
+    // Respetar fecha de inicio y fecha de fin (vigencia temporal)
+    if (exp.type === 'fixed') {
+      if (targetMonth >= exp.startMonth && (!exp.endMonth || targetMonth <= exp.endMonth)) {
+        isApplicable = true;
+      }
+    } else if (exp.type === 'one_time') {
+      if (targetMonth === exp.startMonth) isApplicable = true;
+    } else if (exp.type === 'installment') {
       const diff = getMonthDiff(exp.startMonth, targetMonth);
       if (diff >= 0 && diff < exp.installmentCount) isApplicable = true;
     }
 
     if (isApplicable) {
       const monthlyAmount = Number(exp.installmentAmount) || 0;
-      const userPct = exp.userSharePct !== null && exp.userSharePct !== undefined ? Number(exp.userSharePct) : 100;
-      const share = Math.round(monthlyAmount * (userPct / 100));
+      
+      // Determinar porcentaje correspondiente
+      let userPct = 100;
+      if (exp.householdId && householdMap[exp.householdId] !== undefined) {
+        userPct = householdMap[exp.householdId];
+      } else if (exp.isShared && exp.userSharePct !== null) {
+        userPct = Number(exp.userSharePct);
+      }
 
-      if (exp.type === 'fixed') fixedExpensesUserShare += share;
-      else if (exp.type === 'installment') installmentsUserShare += share;
-      else oneTimeUserShare += share;
+      const userShareAmount = Math.round(monthlyAmount * (userPct / 100));
+      const isPaid = Boolean(paymentsMap[exp.id]);
+
+      if (exp.type === 'fixed') fixedExpensesUserShare += userShareAmount;
+      else if (exp.type === 'installment') installmentsUserShare += userShareAmount;
+      else oneTimeUserShare += userShareAmount;
+
+      if (isPaid) {
+        totalPaidObligations += userShareAmount;
+      }
+
+      expensesBreakdown.push({
+        id: exp.id,
+        name: exp.name,
+        category: exp.category,
+        type: exp.type,
+        totalAmount: monthlyAmount,
+        userSharePct: userPct,
+        userShareAmount,
+        isShared: Boolean(exp.isShared || exp.householdId),
+        isHousehold: Boolean(exp.householdId),
+        isPaid,
+      });
     }
   }
 
   const totalObligations = fixedExpensesUserShare + installmentsUserShare + oneTimeUserShare;
+  const totalPendingObligations = Math.max(0, totalObligations - totalPaidObligations);
+  const paidPct = totalObligations > 0 ? Math.min(100, Math.round((totalPaidObligations / totalObligations) * 100)) : 100;
   const freeBalance = netIncome - totalObligations;
 
   return {
@@ -150,7 +233,11 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     installmentsUserShare,
     oneTimeUserShare,
     totalObligations,
+    totalPaidObligations,
+    totalPendingObligations,
+    paidPct,
     freeBalance,
+    expensesBreakdown,
   };
 }
 

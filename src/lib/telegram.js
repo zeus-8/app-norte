@@ -3,7 +3,6 @@
  * Maneja el envío de mensajes, vinculación de usuarios y formato de reportes financieros.
  */
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot';
 
 /**
@@ -15,7 +14,9 @@ export async function sendTelegramMessage(chatId, text, options = {}) {
     return { success: false, error: 'No se especificó chatId de Telegram' };
   }
 
-  if (!TELEGRAM_BOT_TOKEN) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+
+  if (!token) {
     console.log(`[TELEGRAM SIMULADOR] Para Chat ID ${chatId}:\n${text}`);
     return {
       success: true,
@@ -25,7 +26,7 @@ export async function sendTelegramMessage(chatId, text, options = {}) {
   }
 
   try {
-    const url = `${TELEGRAM_API_BASE}${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    const url = `${TELEGRAM_API_BASE}${token}/sendMessage`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -41,6 +42,22 @@ export async function sendTelegramMessage(chatId, text, options = {}) {
     const data = await response.json();
     if (!data.ok) {
       console.error('[Telegram API Error]', data);
+      
+      // Mensajes amigables para errores típicos de Telegram
+      if (data.description && data.description.includes('chat not found')) {
+        return {
+          success: false,
+          error: `Telegram requiere que primero abras tu bot @${process.env.TELEGRAM_BOT_USERNAME || 'MiAutoGastos_bot'} y presiones el botón "Iniciar" (o le envíes /start) para autorizarlo.`
+        };
+      }
+
+      if (data.description && data.description.includes('bot was blocked')) {
+        return {
+          success: false,
+          error: `El bot fue bloqueado en Telegram. Desbloquéalo en tu app de Telegram para recibir mensajes.`
+        };
+      }
+
       return { success: false, error: data.description || 'Error de API de Telegram' };
     }
 
@@ -99,10 +116,18 @@ export function formatMonthlyFinancialReport(user, summary, vehicleAlerts = [], 
   msg += `\n`;
 
   // 2. Obligaciones y Cuotas
+  const totalPaid = Number(summary?.totalPaidObligations || 0);
+  const totalPending = Number(summary?.totalPendingObligations !== undefined ? summary.totalPendingObligations : Math.max(0, totalObligations - totalPaid));
+  const paidPct = Number(summary?.paidPct || (totalObligations > 0 ? Math.round((totalPaid / totalObligations) * 100) : 100));
+
   msg += `💳 <b>Obligaciones del Mes:</b>\n`;
   msg += `• Gastos Fijos (tu parte): ${formatMoney(fixed)}\n`;
   msg += `• Cuotas Tarjetas: ${formatMoney(installments)}\n`;
   msg += `• <b>Total a Cubrir:</b> ${formatMoney(totalObligations)}\n`;
+  msg += `• ✅ <b>Ya Cancelado:</b> ${formatMoney(totalPaid)} (${paidPct}%)\n`;
+  if (totalPending > 0) {
+    msg += `• ⏳ <b>Pendiente Desembolsar:</b> ${formatMoney(totalPending)}\n`;
+  }
   msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
 
   // 3. Balance Libre

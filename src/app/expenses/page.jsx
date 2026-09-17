@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/components/Navbar';
 import ExpenseModal from '@/components/ExpenseModal';
+import IncreaseModal from '@/components/IncreaseModal';
 import { 
   Receipt, 
   CreditCard, 
@@ -14,7 +15,11 @@ import {
   Layers, 
   ChevronDown, 
   ChevronUp,
-  Sparkles
+  CheckCircle2,
+  Clock,
+  TrendingUp,
+  Sparkles,
+  Home
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -37,7 +42,10 @@ export default function ExpensesPage() {
   const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'fixed', 'installment', 'shared', 'one_time'
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [increaseModalOpen, setIncreaseModalOpen] = useState(false);
+  const [increasingExpense, setIncreasingExpense] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [togglingPaymentId, setTogglingPaymentId] = useState(null);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -86,14 +94,67 @@ export default function ExpensesPage() {
     if (res.ok) await refreshData();
   };
 
+  const handleTogglePayment = async (exp) => {
+    try {
+      setTogglingPaymentId(exp.id);
+      const newPaid = !exp.is_paid;
+      
+      // Optimistic update
+      setExpensesData(prev => {
+        if (!prev || !prev.expenses) return prev;
+        const updatedExpenses = prev.expenses.map(e => e.id === exp.id ? { ...e, is_paid: newPaid, paid_at: newPaid ? new Date().toISOString() : null } : e);
+        const totalPaidAmount = updatedExpenses.filter(e => e.is_paid).reduce((sum, e) => sum + (e.user_amount || 0), 0);
+        const totalUserMonthlyTarget = prev.summary?.totalUserMonthlyTarget || 0;
+        const totalPendingAmount = Math.max(0, totalUserMonthlyTarget - totalPaidAmount);
+        const paidPercentage = totalUserMonthlyTarget > 0 ? Math.round((totalPaidAmount / totalUserMonthlyTarget) * 100) : 100;
+
+        return {
+          ...prev,
+          expenses: updatedExpenses,
+          summary: {
+            ...prev.summary,
+            totalPaidAmount,
+            totalPendingAmount,
+            paidPercentage,
+          }
+        };
+      });
+
+      const res = await fetch('/api/expenses/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expenseId: exp.id,
+          month: currentMonth,
+          isPaid: newPaid,
+        }),
+      });
+
+      if (!res.ok) {
+        await refreshData();
+      }
+    } catch (err) {
+      console.error('Error toggling payment:', err);
+      await refreshData();
+    } finally {
+      setTogglingPaymentId(null);
+    }
+  };
+
   const expenses = expensesData?.expenses || [];
   const summary = expensesData?.summary || {};
+  const totalObligations = summary.totalUserMonthlyTarget || 0;
+  const totalPaid = summary.totalPaidAmount || 0;
+  const totalPending = summary.totalPendingAmount !== undefined ? summary.totalPendingAmount : Math.max(0, totalObligations - totalPaid);
+  const paidPct = summary.paidPercentage !== undefined ? summary.paidPercentage : (totalObligations > 0 ? Math.round((totalPaid / totalObligations) * 100) : 100);
 
   const filteredExpenses = expenses.filter(exp => {
     if (activeFilter === 'fixed') return exp.type === 'fixed';
     if (activeFilter === 'installment') return exp.type === 'installment';
-    if (activeFilter === 'shared') return Boolean(exp.isShared);
+    if (activeFilter === 'shared') return Boolean(exp.isShared || exp.is_household);
     if (activeFilter === 'one_time') return exp.type === 'one_time';
+    if (activeFilter === 'pending') return !exp.is_paid;
+    if (activeFilter === 'paid') return exp.is_paid;
     return true;
   });
 
@@ -111,10 +172,10 @@ export default function ExpensesPage() {
         <div>
           <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 10 }}>
             <Receipt className="text-amber" size={24} />
-            <span>Control de Gastos, Hogar y Cuotas Sin Interés</span>
+            <span>Control de Gastos, Hogar y Pagos del Mes</span>
           </h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Administra tus gastos fijos recurrentes, divisiones compartidas del hogar y proyección de cuotas a 12 meses
+            Administra tus compromisos, tilda lo cancelado en el mes y proyecta cuotas a 12 meses
           </p>
         </div>
 
@@ -122,6 +183,53 @@ export default function ExpensesPage() {
           <Plus size={16} />
           <span>+ Nuevo Gasto o Cuota</span>
         </button>
+      </div>
+
+      {/* Barra de Progreso de Pagos Mensuales */}
+      <div className="card" style={{ marginBottom: 20, background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(14, 165, 233, 0.08) 100%)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'rgba(16, 185, 129, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+              <CheckCircle2 size={20} />
+            </div>
+            <div>
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: 'white' }}>
+                Checklist de Desembolsos del Mes ({paidPct}% Cancelado)
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Tilda las casillas `[✓]` en la tabla cuando abones cada servicio, cuota o alquiler
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>YA PAGADO</div>
+              <div className="font-mono text-emerald" style={{ fontSize: '1.15rem', fontWeight: 800 }}>
+                ${totalPaid.toLocaleString()}
+              </div>
+            </div>
+            <div style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: 16 }}>
+              <div style={{ fontSize: '0.72rem', color: '#fb7185' }}>PENDIENTE POR PAGAR</div>
+              <div className="font-mono text-rose" style={{ fontSize: '1.15rem', fontWeight: 800 }}>
+                ${totalPending.toLocaleString()}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Barra de progreso */}
+        <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+          <div 
+            style={{ 
+              width: `${paidPct}%`, 
+              height: '100%', 
+              background: paidPct === 100 ? '#10b981' : 'linear-gradient(90deg, #10b981 0%, #06b6d4 100%)', 
+              transition: 'width 0.4s ease',
+              borderRadius: '4px' 
+            }} 
+          />
+        </div>
       </div>
 
       {/* KPIs de Gastos */}
@@ -132,10 +240,10 @@ export default function ExpensesPage() {
             <div style={{ color: '#fb7185' }}><Receipt size={20} /></div>
           </div>
           <div className="kpi-value font-mono text-rose">
-            ${(summary.totalUserMonthlyTarget || 0).toLocaleString()}
+            ${totalObligations.toLocaleString()}
           </div>
           <div className="kpi-subtext">
-            <span>Tu total a cubrir en el mes seleccionado</span>
+            <span>Tu total mensual a cubrir</span>
           </div>
         </div>
 
@@ -148,7 +256,7 @@ export default function ExpensesPage() {
             ${(summary.totalUserInstallments || 0).toLocaleString()}
           </div>
           <div className="kpi-subtext">
-            <span>{expenses.filter(e => e.type === 'installment').length} cuotas activas</span>
+            <span>{expenses.filter(e => e.type === 'installment').length} compras activas</span>
           </div>
         </div>
 
@@ -168,13 +276,13 @@ export default function ExpensesPage() {
         <div className="kpi-card cyan">
           <div className="kpi-header">
             <span className="kpi-label">Total Gastos del Hogar</span>
-            <div style={{ color: '#38bdf8' }}><Users size={20} /></div>
+            <div style={{ color: '#38bdf8' }}><Home size={20} /></div>
           </div>
           <div className="kpi-value font-mono text-cyan">
             ${(summary.totalHouseholdAll || 0).toLocaleString()}
           </div>
           <div className="kpi-subtext">
-            <span>100% de costos compartidos de la casa</span>
+            <span>100% de costos compartidos</span>
           </div>
         </div>
       </div>
@@ -256,6 +364,20 @@ export default function ExpensesPage() {
           Todos ({expenses.length})
         </button>
         <button 
+          className={`btn btn-sm ${activeFilter === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
+          style={activeFilter === 'pending' ? { background: '#f43f5e', borderColor: '#f43f5e' } : {}}
+          onClick={() => setActiveFilter('pending')}
+        >
+          ⏳ Pendientes ({expenses.filter(e => !e.is_paid).length})
+        </button>
+        <button 
+          className={`btn btn-sm ${activeFilter === 'paid' ? 'btn-primary' : 'btn-secondary'}`}
+          style={activeFilter === 'paid' ? { background: '#10b981', borderColor: '#10b981' } : {}}
+          onClick={() => setActiveFilter('paid')}
+        >
+          ✅ Pagados ({expenses.filter(e => e.is_paid).length})
+        </button>
+        <button 
           className={`btn btn-sm ${activeFilter === 'fixed' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveFilter('fixed')}
         >
@@ -271,7 +393,7 @@ export default function ExpensesPage() {
           className={`btn btn-sm ${activeFilter === 'shared' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveFilter('shared')}
         >
-          🏠 Compartidos ({expenses.filter(e => e.isShared).length})
+          🏠 Hogar / Compartidos ({expenses.filter(e => e.isShared || e.is_household).length})
         </button>
         <button 
           className={`btn btn-sm ${activeFilter === 'one_time' ? 'btn-primary' : 'btn-secondary'}`}
@@ -299,11 +421,12 @@ export default function ExpensesPage() {
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: '46px', textAlign: 'center' }}>¿Pago?</th>
                   <th>Concepto</th>
                   <th>Categoría</th>
                   <th>Tipo / Cuotas</th>
                   <th>Monto Total/Cuota</th>
-                  <th>División</th>
+                  <th>División Hogar</th>
                   <th>Tu Monto</th>
                   <th>Medio Pago</th>
                   <th style={{ textAlign: 'center' }}>Acciones</th>
@@ -311,9 +434,41 @@ export default function ExpensesPage() {
               </thead>
               <tbody>
                 {filteredExpenses.map(exp => (
-                  <tr key={exp.id}>
+                  <tr key={exp.id} style={{ opacity: exp.is_paid ? 0.78 : 1, transition: 'opacity 0.2s' }}>
+                    {/* Checkbox de pago interactivo */}
+                    <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                      <button
+                        type="button"
+                        disabled={togglingPaymentId === exp.id}
+                        onClick={() => handleTogglePayment(exp)}
+                        style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '6px',
+                          border: exp.is_paid ? '2px solid #10b981' : '2px solid #64748b',
+                          background: exp.is_paid ? '#10b981' : 'transparent',
+                          color: 'white',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                        title={exp.is_paid ? 'Marcado como pagado. Clic para desmarcar' : 'Clic para marcar como pagado en este mes'}
+                      >
+                        {exp.is_paid && <CheckCircle2 size={16} />}
+                      </button>
+                    </td>
+
                     <td>
-                      <div style={{ fontWeight: 700, color: 'white', fontSize: '0.95rem' }}>{exp.name}</div>
+                      <div style={{ fontWeight: 700, color: exp.is_paid ? '#cbd5e1' : 'white', fontSize: '0.95rem', textDecoration: exp.is_paid ? 'line-through' : 'none' }}>
+                        {exp.name}
+                      </div>
+                      {exp.is_paid && (
+                        <span style={{ fontSize: '0.7rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <CheckCircle2 size={12} /> Pagado este mes
+                        </span>
+                      )}
                       {exp.notes && <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{exp.notes}</div>}
                     </td>
 
@@ -347,11 +502,18 @@ export default function ExpensesPage() {
                     </td>
 
                     <td>
-                      {exp.isShared ? (
-                        <span className="badge badge-blue font-mono" style={{ fontSize: '0.72rem' }}>
-                          <Users size={12} style={{ marginRight: 3 }} />
-                          {exp.userSharePct}% propio
-                        </span>
+                      {exp.is_household || exp.isShared ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span className="badge badge-blue font-mono" style={{ fontSize: '0.72rem', width: 'fit-content' }}>
+                            <Home size={11} style={{ marginRight: 3 }} />
+                            {exp.user_share_pct || exp.userSharePct}% propio
+                          </span>
+                          {exp.household_name && (
+                            <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                              {exp.household_name}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>100% tuyo</span>
                       )}
@@ -371,9 +533,21 @@ export default function ExpensesPage() {
                     </td>
 
                     <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: 5 }}>
+                        {/* Botón Aumento para gastos fijos (Alquiler, Servicios, etc.) */}
+                        {exp.type === 'fixed' && (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            style={{ color: '#fbbf24', padding: '5px 8px' }}
+                            onClick={() => { setIncreasingExpense(exp); setIncreaseModalOpen(true); }}
+                            title="Aplicar aumento de alquiler o servicio con vigencia"
+                          >
+                            <TrendingUp size={14} />
+                          </button>
+                        )}
                         <button 
                           className="btn btn-secondary btn-sm" 
+                          style={{ padding: '5px 8px' }}
                           onClick={() => { setEditingExpense(exp); setExpenseModalOpen(true); }}
                           title="Editar gasto"
                         >
@@ -381,7 +555,7 @@ export default function ExpensesPage() {
                         </button>
                         <button 
                           className="btn btn-secondary btn-sm" 
-                          style={{ color: '#f87171' }}
+                          style={{ color: '#f87171', padding: '5px 8px' }}
                           onClick={() => handleDeleteExpense(exp.id)}
                           title="Eliminar gasto"
                         >
@@ -403,6 +577,14 @@ export default function ExpensesPage() {
         onSave={handleSaveExpense}
         initialData={editingExpense}
         currentMonth={currentMonth}
+      />
+
+      <IncreaseModal
+        isOpen={increaseModalOpen}
+        onClose={() => setIncreaseModalOpen(false)}
+        expense={increasingExpense}
+        currentMonth={currentMonth}
+        onSuccess={refreshData}
       />
     </div>
   );

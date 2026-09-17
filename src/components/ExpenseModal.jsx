@@ -27,6 +27,8 @@ export default function ExpenseModal({
   initialData,
   currentMonth
 }) {
+  const [household, setHousehold] = useState(null);
+  const [householdId, setHouseholdId] = useState('');
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Hogar');
   const [type, setType] = useState('fixed'); // 'fixed' | 'one_time' | 'installment'
@@ -41,6 +43,21 @@ export default function ExpenseModal({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (isOpen) {
+      fetch('/api/household')
+        .then(r => r.json())
+        .then(data => {
+          if (data.household) {
+            setHousehold(data.household);
+          } else {
+            setHousehold(null);
+          }
+        })
+        .catch(err => console.error('Error fetching household:', err));
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
     if (initialData) {
       setName(initialData.name || '');
       setCategory(initialData.category || 'Hogar');
@@ -48,8 +65,9 @@ export default function ExpenseModal({
       setTotalAmount(initialData.totalAmount || initialData.total_amount || '');
       setInstallmentCount(String(initialData.installmentCount || initialData.installment_count || 1));
       setStartMonth(initialData.startMonth || initialData.start_month || currentMonth || new Date().toISOString().slice(0, 7));
-      setIsShared(Boolean(initialData.isShared || initialData.is_shared));
-      setUserSharePct(String(initialData.userSharePct !== undefined ? initialData.userSharePct : (initialData.juan_share_pct !== undefined ? initialData.juan_share_pct : 100)));
+      setHouseholdId(initialData.householdId || initialData.household_id || '');
+      setIsShared(Boolean(initialData.isShared || initialData.is_shared || initialData.householdId || initialData.household_id));
+      setUserSharePct(String(initialData.userSharePct !== undefined ? initialData.userSharePct : (initialData.user_share_pct !== undefined ? initialData.user_share_pct : 100)));
       setPaymentMethod(initialData.paymentMethod || initialData.payment_method || 'Efectivo');
       setNotes(initialData.notes || '');
     } else {
@@ -59,6 +77,7 @@ export default function ExpenseModal({
       setTotalAmount('');
       setInstallmentCount('12');
       setStartMonth(currentMonth || new Date().toISOString().slice(0, 7));
+      setHouseholdId('');
       setIsShared(false);
       setUserSharePct('100');
       setPaymentMethod('Transferencia');
@@ -100,6 +119,7 @@ export default function ExpenseModal({
         installmentCount: count,
         installmentAmount: Number(monthlyInstAmount.toFixed(2)),
         startMonth,
+        householdId: (isShared && householdId) ? householdId : null,
         isShared,
         userSharePct: userPct,
         paymentMethod,
@@ -301,21 +321,40 @@ export default function ExpenseModal({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isShared ? '10px' : '0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Users size={16} className="text-blue" />
-                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'white' }}>¿Es un gasto compartido del hogar?</span>
+                <div>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'white', display: 'block' }}>
+                    ¿Es un gasto compartido del hogar?
+                  </span>
+                  {household && (
+                    <span style={{ fontSize: '0.72rem', color: '#38bdf8' }}>
+                      Asociado a: {household.name} (Tu % base: {Number(household.userSharePct)}%)
+                    </span>
+                  )}
+                </div>
               </div>
               <input
                 type="checkbox"
                 checked={isShared}
                 onChange={(e) => {
-                  setIsShared(e.target.checked);
-                  if (e.target.checked && userSharePct === '100') setUserSharePct('60');
+                  const checked = e.target.checked;
+                  setIsShared(checked);
+                  if (checked) {
+                    if (household) {
+                      setHouseholdId(household.id);
+                      setUserSharePct(String(Number(household.userSharePct) || 60));
+                    } else if (userSharePct === '100') {
+                      setUserSharePct('60');
+                    }
+                  } else {
+                    setHouseholdId('');
+                  }
                 }}
                 style={{ width: '18px', height: '18px', cursor: 'pointer' }}
               />
             </div>
 
             {isShared && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '8px', marginTop: '4px' }}>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tu porcentaje a pagar:</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <input

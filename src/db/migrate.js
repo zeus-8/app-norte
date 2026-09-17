@@ -26,35 +26,49 @@ async function runMigrations() {
   });
 
   try {
-    const sqlPath = path.join(__dirname, '../../drizzle/0000_yielding_scarlet_witch.sql');
-    if (!fs.existsSync(sqlPath)) {
-      console.error(`❌ Archivo SQL no encontrado en: ${sqlPath}`);
+    const drizzleDir = path.join(__dirname, '../../drizzle');
+    if (!fs.existsSync(drizzleDir)) {
+      console.error(`❌ Directorio drizzle no encontrado en: ${drizzleDir}`);
       process.exit(1);
     }
 
-    const sqlContent = fs.readFileSync(sqlPath, 'utf8');
-    const statements = sqlContent
-      .split('--> statement-breakpoint')
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
+    const sqlFiles = fs.readdirSync(drizzleDir)
+      .filter(f => f.endsWith('.sql'))
+      .sort();
 
-    console.log(`🚀 Ejecutando ${statements.length} sentencias SQL de migración...`);
+    console.log(`🚀 Se encontraron ${sqlFiles.length} archivos de migración: ${sqlFiles.join(', ')}`);
 
-    for (let i = 0; i < statements.length; i++) {
-      const stmt = statements[i];
-      try {
-        await pool.query(stmt);
-      } catch (err) {
-        // Ignorar si la tabla o índice ya existe
-        if (err.code === '42P07' || err.code === '42710') {
-          console.log(`ℹ️ [Aviso] Objeto ya existe: ${err.message}`);
-        } else {
-          console.warn(`⚠️ Error en sentencia ${i + 1}:`, err.message);
+    for (const file of sqlFiles) {
+      const sqlPath = path.join(drizzleDir, file);
+      const sqlContent = fs.readFileSync(sqlPath, 'utf8');
+      const statements = sqlContent
+        .split('--> statement-breakpoint')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+      console.log(`📄 Aplicando ${file} (${statements.length} sentencias)...`);
+
+      for (let i = 0; i < statements.length; i++) {
+        const stmt = statements[i];
+        try {
+          await pool.query(stmt);
+        } catch (err) {
+          // Ignorar si la tabla, columna, índice o restricción ya existe
+          if (
+            err.code === '42P07' || // relation already exists
+            err.code === '42710' || // unique index/constraint already exists
+            err.code === '42701' || // column already exists
+            err.code === '42P16'    // multiple primary keys
+          ) {
+            console.log(`ℹ️ [Aviso] Objeto/columna ya existe: ${err.message}`);
+          } else {
+            console.warn(`⚠️ Error en ${file} [sentencia ${i + 1}]:`, err.message);
+          }
         }
       }
     }
 
-    console.log('✅ ¡Migración completada exitosamente! Todas las tablas han sido creadas.');
+    console.log('✅ ¡Todas las migraciones se aplicaron con éxito!');
   } catch (error) {
     console.error('❌ Error fatal durante la migración:', error);
     process.exit(1);

@@ -9,6 +9,10 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 255 }).notNull(),
   role: varchar('role', { length: 50 }).default('user').notNull(), // 'admin' | 'user'
   
+  // Perfil Google OAuth (si aplica)
+  googleId: varchar('google_id', { length: 255 }),
+  avatarUrl: varchar('avatar_url', { length: 500 }),
+
   // Preferencias operativas de movilidad
   driverType: varchar('driver_type', { length: 50 }).default('owner').notNull(), // 'owner' (auto propio) | 'renter' (auto alquilado)
   activeApps: json('active_apps').$type().default(['uber', 'cabify', 'didi']), // ['uber', 'cabify', 'didi', 'rappi', 'pedidosya', 'indrive']
@@ -33,7 +37,27 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// 2. JORNADAS DIARIAS MULTIAPP (Uber, Cabify, DiDi, Rappi, etc.)
+// 2. HOGAR COMPARTIDO / GRUPO FAMILIAR (Household)
+export const households = pgTable('households', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(), // Ej: "Hogar Juan & Yeli"
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// 3. MIEMBROS DEL HOGAR Y PORCENTAJES DE DIVISIÓN
+export const householdMembers = pgTable('household_members', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  householdId: uuid('household_id').references(() => households.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  defaultSharePct: numeric('default_share_pct', { precision: 5, scale: 2 }).default('50.00').notNull(), // Ej: 60.00 Juan / 40.00 Yeli
+  status: varchar('status', { length: 50 }).default('pending').notNull(), // 'accepted' | 'pending'
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// 4. JORNADAS DIARIAS MULTIAPP (Uber, Cabify, DiDi, Rappi, etc.)
 export const dailyLogs = pgTable('daily_logs', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
@@ -52,7 +76,7 @@ export const dailyLogs = pgTable('daily_logs', {
   userDateIdx: uniqueIndex('daily_logs_user_date_idx').on(t.userId, t.date),
 }));
 
-// 3. MANTENIMIENTO VEHICULAR Y DOCUMENTACIÓN (Km, Tiempo, Híbrido)
+// 5. MANTENIMIENTO VEHICULAR Y DOCUMENTACIÓN (Km, Tiempo, Híbrido)
 export const vehicleMaintenance = pgTable('vehicle_maintenance', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
@@ -74,7 +98,7 @@ export const vehicleMaintenance = pgTable('vehicle_maintenance', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// 4. HISTORIAL DE SERVICES REALIZADOS
+// 6. HISTORIAL DE SERVICES REALIZADOS
 export const maintenanceHistory = pgTable('maintenance_history', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
@@ -87,10 +111,11 @@ export const maintenanceHistory = pgTable('maintenance_history', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// 5. GASTOS Y CUOTAS SIN INTERÉS PROYECTADAS
+// 7. GASTOS Y CUOTAS SIN INTERÉS (Personales o Compartidos del Hogar)
 export const expenses = pgTable('expenses', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(), // Creador
+  householdId: uuid('household_id').references(() => households.id, { onDelete: 'set null' }), // NULL si es 100% personal
   name: varchar('name', { length: 255 }).notNull(),
   category: varchar('category', { length: 100 }).notNull(),
   type: varchar('type', { length: 50 }).default('fixed').notNull(), // 'fixed' | 'one_time' | 'installment'
@@ -98,7 +123,7 @@ export const expenses = pgTable('expenses', {
   installmentCount: integer('installment_count').default(1).notNull(),
   installmentAmount: numeric('installment_amount', { precision: 12, scale: 2 }).default('0').notNull(),
   startMonth: varchar('start_month', { length: 7 }).notNull(), // 'YYYY-MM'
-  endMonth: varchar('end_month', { length: 7 }),               // 'YYYY-MM'
+  endMonth: varchar('end_month', { length: 7 }),               // 'YYYY-MM' (null si es indefinido)
   isShared: boolean('is_shared').default(false).notNull(),
   userSharePct: numeric('user_share_pct', { precision: 5, scale: 2 }).default('100').notNull(),
   paymentMethod: varchar('payment_method', { length: 50 }).default('Efectivo').notNull(),
@@ -108,7 +133,22 @@ export const expenses = pgTable('expenses', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// 6. AJUSTES PERSONALIZADOS POR USUARIO
+// 8. CHECKLIST DE PAGOS MENSUALES (Tildar "Pagado en este mes")
+export const expensePayments = pgTable('expense_payments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  expenseId: uuid('expense_id').references(() => expenses.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  month: varchar('month', { length: 7 }).notNull(), // 'YYYY-MM'
+  isPaid: boolean('is_paid').default(false).notNull(),
+  paidAt: timestamp('paid_at'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  expenseUserMonthIdx: uniqueIndex('expense_payments_user_month_idx').on(t.expenseId, t.userId, t.month),
+}));
+
+// 9. AJUSTES PERSONALIZADOS POR USUARIO
 export const userSettings = pgTable('user_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
@@ -127,6 +167,29 @@ export const usersRelations = relations(users, ({ many }) => ({
   maintenanceHistory: many(maintenanceHistory),
   expenses: many(expenses),
   userSettings: many(userSettings),
+  householdsCreated: many(households),
+  householdMemberships: many(householdMembers),
+  expensePayments: many(expensePayments),
+}));
+
+export const householdsRelations = relations(households, ({ one, many }) => ({
+  creator: one(users, {
+    fields: [households.createdBy],
+    references: [users.id],
+  }),
+  members: many(householdMembers),
+  expenses: many(expenses),
+}));
+
+export const householdMembersRelations = relations(householdMembers, ({ one }) => ({
+  household: one(households, {
+    fields: [householdMembers.householdId],
+    references: [households.id],
+  }),
+  user: one(users, {
+    fields: [householdMembers.userId],
+    references: [users.id],
+  }),
 }));
 
 export const dailyLogsRelations = relations(dailyLogs, ({ one }) => ({
@@ -155,9 +218,25 @@ export const maintenanceHistoryRelations = relations(maintenanceHistory, ({ one 
   }),
 }));
 
-export const expensesRelations = relations(expenses, ({ one }) => ({
+export const expensesRelations = relations(expenses, ({ one, many }) => ({
   user: one(users, {
     fields: [expenses.userId],
+    references: [users.id],
+  }),
+  household: one(households, {
+    fields: [expenses.householdId],
+    references: [households.id],
+  }),
+  payments: many(expensePayments),
+}));
+
+export const expensePaymentsRelations = relations(expensePayments, ({ one }) => ({
+  expense: one(expenses, {
+    fields: [expensePayments.expenseId],
+    references: [expenses.id],
+  }),
+  user: one(users, {
+    fields: [expensePayments.userId],
     references: [users.id],
   }),
 }));

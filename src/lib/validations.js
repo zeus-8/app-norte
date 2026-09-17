@@ -41,6 +41,7 @@ export const expenseSchema = z.object({
   totalAmount: z.coerce.number().gt(0, 'El monto total debe ser mayor a $0'),
   installmentCount: z.coerce.number().int().min(1, 'La cantidad de cuotas debe ser al menos 1').default(1),
   startMonth: z.string().regex(/^\d{4}-\d{2}$/, 'El mes de inicio debe tener formato AAAA-MM (ej. 2026-03)'),
+  householdId: z.string().uuid().nullable().optional(),
   isShared: z.boolean().default(false),
   userSharePct: z.coerce.number().min(1, 'El porcentaje debe ser entre 1% y 100%').max(100, 'El porcentaje máximo es 100%').default(100),
   paymentMethod: z.string().min(1, 'Selecciona un medio de pago'),

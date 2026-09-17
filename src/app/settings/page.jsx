@@ -19,7 +19,10 @@ import {
   Check,
   RefreshCw,
   Zap,
-  HelpCircle
+  HelpCircle,
+  Home,
+  Users,
+  X
 } from 'lucide-react';
 
 const AVAILABLE_APPS = [
@@ -59,15 +62,30 @@ export default function SettingsPage() {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
+  // Estados de Hogar Compartido
+  const [householdData, setHouseholdData] = useState(null);
+  const [householdName, setHouseholdName] = useState('');
+  const [partnerEmail, setPartnerEmail] = useState('');
+  const [userSharePct, setUserSharePct] = useState('60');
+  const [partnerSharePct, setPartnerSharePct] = useState('40');
+  const [creatingHousehold, setCreatingHousehold] = useState(false);
+  const [householdSuccess, setHouseholdSuccess] = useState('');
+  const [householdError, setHouseholdError] = useState('');
+
   const loadProfile = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/user/profile');
-      if (res.status === 401) {
+      const [resProfile, resHousehold] = await Promise.all([
+        fetch('/api/user/profile'),
+        fetch('/api/household'),
+      ]);
+
+      if (resProfile.status === 401) {
         router.push('/login');
         return;
       }
-      const data = await res.json();
+
+      const data = await resProfile.json();
       if (data.user) {
         setUser(data.user);
         setName(data.user.name || '');
@@ -77,6 +95,11 @@ export default function SettingsPage() {
         setTelegramAlertDays(data.user.telegramAlertDays || 5);
         setTelegramEnabled(Boolean(data.user.telegramEnabled));
         if (data.botUsername) setBotUsername(data.botUsername);
+      }
+
+      if (resHousehold.ok) {
+        const hData = await resHousehold.json();
+        setHouseholdData(hData);
       }
     } catch (err) {
       console.error('Error al cargar perfil:', err);
@@ -200,6 +223,59 @@ export default function SettingsPage() {
       setTimeout(() => setPasswordSuccess(''), 4000);
     } catch (err) {
       setPasswordError(err.message);
+    }
+  };
+
+  const handleCreateHousehold = async (e) => {
+    e.preventDefault();
+    setCreatingHousehold(true);
+    setHouseholdSuccess('');
+    setHouseholdError('');
+
+    try {
+      const res = await fetch('/api/household', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: householdName,
+          partnerEmail,
+          userSharePct,
+          partnerSharePct,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al crear el hogar');
+      }
+
+      setHouseholdSuccess(data.message || '¡Hogar creado exitosamente!');
+      setHouseholdName('');
+      setPartnerEmail('');
+      await loadProfile();
+    } catch (err) {
+      setHouseholdError(err.message);
+    } finally {
+      setCreatingHousehold(false);
+    }
+  };
+
+  const handleRespondInvitation = async (householdId, action) => {
+    try {
+      const res = await fetch('/api/household/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ householdId, action }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setHouseholdSuccess(data.message);
+        await loadProfile();
+      } else {
+        setHouseholdError(data.error || 'Error al procesar invitación');
+      }
+    } catch (err) {
+      setHouseholdError(err.message);
     }
   };
 
@@ -408,6 +484,197 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Card: Hogar Compartido & Cuentas Vinculadas */}
+          <div className="card" style={{ border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="kpi-icon-wrap" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
+                  <Home size={18} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>Hogar & Cuentas Vinculadas</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>División compartida de gastos (60/40)</div>
+                </div>
+              </div>
+              {householdData?.household && (
+                <span className="badge badge-blue font-mono" style={{ fontSize: '0.72rem' }}>
+                  ACTIVO
+                </span>
+              )}
+            </div>
+
+            {householdSuccess && (
+              <div style={{ padding: '8px 12px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-emerald)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', marginBottom: 12 }}>
+                {householdSuccess}
+              </div>
+            )}
+            {householdError && (
+              <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-rose)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', marginBottom: 12 }}>
+                {householdError}
+              </div>
+            )}
+
+            {/* Invitaciones Pendientes */}
+            {householdData?.pendingInvitations?.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                {householdData.pendingInvitations.map(inv => (
+                  <div key={inv.membershipId} style={{ background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: 'var(--radius-md)', padding: '12px' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fbbf24', marginBottom: 4 }}>
+                      ¡Invitación para unirte a &quot;{inv.householdName}&quot;!
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-main)', marginBottom: 10 }}>
+                      Tu porcentaje asignado para gastos compartidos es del <strong>{Number(inv.defaultSharePct)}%</strong>.
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleRespondInvitation(inv.householdId, 'accept')}
+                        className="btn btn-primary btn-sm"
+                        style={{ background: '#10b981', borderColor: '#10b981' }}
+                      >
+                        <Check size={14} />
+                        <span>Aceptar Invitación</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRespondInvitation(inv.householdId, 'decline')}
+                        className="btn btn-secondary btn-sm"
+                        style={{ color: '#f87171' }}
+                      >
+                        <X size={14} />
+                        <span>Rechazar</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Hogar Activo */}
+            {householdData?.household ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>HOGAR VINCULADO</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'white' }}>
+                    {householdData.household.name}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label" style={{ marginBottom: 6 }}>Integrantes y Porcentajes de Gastos</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {householdData.household.members?.map(m => (
+                      <div key={m.memberId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'white' }}>
+                            {m.userName} {m.userId === user?.id ? '(Tú)' : ''}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                            {m.userEmail}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span className="font-mono text-cyan" style={{ fontWeight: 800, fontSize: '1rem' }}>
+                            {Number(m.defaultSharePct)}%
+                          </span>
+                          <div style={{ fontSize: '0.68rem', color: m.status === 'accepted' ? '#34d399' : '#fbbf24' }}>
+                            {m.status === 'accepted' ? '✅ Vinculado' : '⏳ Pendiente'}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.74rem', color: '#94a3b8', lineHeight: 1.4, background: 'rgba(56, 189, 248, 0.05)', padding: '10px', borderRadius: 'var(--radius-sm)', border: '1px dashed rgba(56, 189, 248, 0.25)' }}>
+                  💡 <strong>¿Cómo funciona?</strong> Cuando cualquiera de los dos cargue un gasto como <em>&quot;Compartido del Hogar&quot;</em> (ej. Alquiler, Luz, Compras), el sistema calculará automáticamente tu {Number(householdData.household.userSharePct)}% en tus reportes y balances sin duplicar datos.
+                </div>
+              </div>
+            ) : (
+              /* Formulario para Crear Hogar */
+              <form onSubmit={handleCreateHousehold} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', margin: 0 }}>
+                  Vincula tu cuenta con tu pareja para compartir los gastos de la casa divididos automáticamente (ej. Juan 60% / Yeli 40%).
+                </p>
+
+                <div>
+                  <label className="label">Nombre del Hogar</label>
+                  <input
+                    type="text"
+                    required
+                    className="input"
+                    value={householdName}
+                    onChange={(e) => setHouseholdName(e.target.value)}
+                    placeholder="Ej. Hogar Juan & Yeli"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Correo de tu Pareja</label>
+                  <input
+                    type="email"
+                    required
+                    className="input"
+                    value={partnerEmail}
+                    onChange={(e) => setPartnerEmail(e.target.value)}
+                    placeholder="ej. yeli@correo.com"
+                  />
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: 2, display: 'block' }}>
+                    Tu pareja debe estar registrada previamente en AutoGastos (o acceder con Google).
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label className="label">Tu Porcentaje (%)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      required
+                      className="input"
+                      value={userSharePct}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setUserSharePct(val);
+                        const num = Number(val);
+                        if (num > 0 && num <= 100) setPartnerSharePct(String(100 - num));
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="label">Porcentaje Pareja (%)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      required
+                      className="input"
+                      value={partnerSharePct}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPartnerSharePct(val);
+                        const num = Number(val);
+                        if (num > 0 && num <= 100) setUserSharePct(String(100 - num));
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={creatingHousehold}
+                  className="btn btn-primary"
+                  style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}
+                >
+                  <Home size={15} />
+                  <span>{creatingHousehold ? 'Creando hogar...' : '🏡 Crear Hogar y Vincular Cuentas'}</span>
+                </button>
+              </form>
+            )}
           </div>
 
         </div>
