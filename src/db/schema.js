@@ -124,6 +124,7 @@ export const expenses = pgTable('expenses', {
   installmentAmount: numeric('installment_amount', { precision: 12, scale: 2 }).default('0').notNull(),
   startMonth: varchar('start_month', { length: 7 }).notNull(), // 'YYYY-MM'
   endMonth: varchar('end_month', { length: 7 }),               // 'YYYY-MM' (null si es indefinido)
+  dueDay: integer('due_day').default(5),                       // Día habitual de pago (1 a 31)
   isShared: boolean('is_shared').default(false).notNull(),
   userSharePct: numeric('user_share_pct', { precision: 5, scale: 2 }).default('100').notNull(),
   paymentMethod: varchar('payment_method', { length: 50 }).default('Efectivo').notNull(),

@@ -213,7 +213,7 @@ export async function POST(request) {
       return NextResponse.json({ error: firstError, details: validation.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const { name, category, type, totalAmount, installmentCount, startMonth, householdId, isShared, userSharePct, paymentMethod, notes } = validation.data;
+    const { name, category, type, totalAmount, installmentCount, startMonth, dueDay = 5, householdId, isShared, userSharePct, paymentMethod, notes } = validation.data;
     const count = type === 'installment' ? Math.max(1, installmentCount) : 1;
     const instAmount = (totalAmount / count);
 
@@ -235,6 +235,7 @@ export async function POST(request) {
       installmentAmount: String(instAmount.toFixed(2)),
       startMonth,
       endMonth,
+      dueDay: Number(dueDay) || 5,
       isShared: Boolean(isShared || householdId),
       userSharePct: String(userSharePct),
       paymentMethod,

@@ -35,6 +35,7 @@ export default function ExpenseModal({
   const [totalAmount, setTotalAmount] = useState('');
   const [installmentCount, setInstallmentCount] = useState('12');
   const [startMonth, setStartMonth] = useState('');
+  const [dueDay, setDueDay] = useState('5');
   const [isShared, setIsShared] = useState(false);
   const [userSharePct, setUserSharePct] = useState('60');
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
@@ -65,6 +66,7 @@ export default function ExpenseModal({
       setTotalAmount(initialData.totalAmount || initialData.total_amount || '');
       setInstallmentCount(String(initialData.installmentCount || initialData.installment_count || 1));
       setStartMonth(initialData.startMonth || initialData.start_month || currentMonth || new Date().toISOString().slice(0, 7));
+      setDueDay(String(initialData.dueDay || initialData.due_day || 5));
       setHouseholdId(initialData.householdId || initialData.household_id || '');
       setIsShared(Boolean(initialData.isShared || initialData.is_shared || initialData.householdId || initialData.household_id));
       setUserSharePct(String(initialData.userSharePct !== undefined ? initialData.userSharePct : (initialData.user_share_pct !== undefined ? initialData.user_share_pct : 100)));
@@ -77,6 +79,7 @@ export default function ExpenseModal({
       setTotalAmount('');
       setInstallmentCount('12');
       setStartMonth(currentMonth || new Date().toISOString().slice(0, 7));
+      setDueDay('5');
       setHouseholdId('');
       setIsShared(false);
       setUserSharePct('100');
@@ -119,6 +122,7 @@ export default function ExpenseModal({
         installmentCount: count,
         installmentAmount: Number(monthlyInstAmount.toFixed(2)),
         startMonth,
+        dueDay: Number(dueDay) || 5,
         householdId: (isShared && householdId) ? householdId : null,
         isShared,
         userSharePct: userPct,
@@ -287,29 +291,46 @@ export default function ExpenseModal({
             )}
           </div>
 
-          {/* Mes de Inicio y Medio de Pago */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          {/* Mes de Inicio, Día de Pago y Medio de Pago */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 1fr', gap: '10px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
-                MES DE INICIO (AAAA-MM)
+                MES INICIO
               </label>
               <input
                 type="month"
                 required
                 value={startMonth}
                 onChange={(e) => setStartMonth(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'white' }}
+                style={{ width: '100%', padding: '10px 10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'white', fontSize: '0.85rem' }}
               />
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
-                MEDIO DE PAGO
+                DÍA PAGO
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                required
+                value={dueDay}
+                onChange={(e) => setDueDay(e.target.value)}
+                placeholder="5"
+                title="Día habitual en que abonas este gasto (ej. 5 o 10)"
+                style={{ width: '100%', padding: '10px 10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'white', textAlign: 'center', fontWeight: 700 }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                MEDIO PAGO
               </label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'white' }}
+                style={{ width: '100%', padding: '10px 8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'white', fontSize: '0.85rem' }}
               >
                 {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
               </select>

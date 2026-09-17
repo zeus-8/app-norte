@@ -464,12 +464,19 @@ export default function ExpensesPage() {
                       <div style={{ fontWeight: 700, color: exp.is_paid ? '#cbd5e1' : 'white', fontSize: '0.95rem', textDecoration: exp.is_paid ? 'line-through' : 'none' }}>
                         {exp.name}
                       </div>
-                      {exp.is_paid && (
-                        <span style={{ fontSize: '0.7rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <CheckCircle2 size={12} /> Pagado este mes
-                        </span>
-                      )}
-                      {exp.notes && <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{exp.notes}</div>}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                        {exp.dueDay && (
+                          <span style={{ fontSize: '0.68rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '1px 5px', borderRadius: '4px' }}>
+                            📅 Vence día {exp.dueDay}
+                          </span>
+                        )}
+                        {exp.is_paid && (
+                          <span style={{ fontSize: '0.68rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <CheckCircle2 size={11} /> Pagado
+                          </span>
+                        )}
+                      </div>
+                      {exp.notes && <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 2 }}>{exp.notes}</div>}
                     </td>
 
                     <td>

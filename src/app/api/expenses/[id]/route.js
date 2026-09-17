@@ -26,7 +26,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: firstError }, { status: 400 });
     }
 
-    const { name, category, type, totalAmount, installmentCount, startMonth, isShared, userSharePct, paymentMethod, notes } = validation.data;
+    const { name, category, type, totalAmount, installmentCount, startMonth, dueDay = 5, householdId, isShared, userSharePct, paymentMethod, notes } = validation.data;
     const count = type === 'installment' ? Math.max(1, installmentCount) : 1;
     const instAmount = (totalAmount / count);
 
@@ -38,6 +38,7 @@ export async function PUT(request, { params }) {
     }
 
     await db.update(expenses).set({
+      householdId: householdId || null,
       name,
       category,
       type,
@@ -46,7 +47,8 @@ export async function PUT(request, { params }) {
       installmentAmount: String(instAmount.toFixed(2)),
       startMonth,
       endMonth,
-      isShared,
+      dueDay: Number(dueDay) || 5,
+      isShared: Boolean(isShared || householdId),
       userSharePct: String(userSharePct),
       paymentMethod,
       notes,

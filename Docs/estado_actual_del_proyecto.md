@@ -75,10 +75,33 @@
 
 ---
 
+### 🟢 FASE 4: Suite Financiera Avanzada, Google OAuth & Hogar Compartido (COMPLETADA)
+1. **Google OAuth 2.0 (Acceso con 1 Clic):**
+   - Integración nativa en [`src/lib/google-auth.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/lib/google-auth.js), [`src/app/api/auth/google/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/auth/google/route.js) y [`src/app/api/auth/google/callback/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/auth/google/callback/route.js).
+   - Auto-aprovisionamiento de nuevos usuarios con `role: 'user'` y catálogo vehicular argentino precargado.
+   - Restricción de seguridad: Cuentas de Administrador (`admin@autogastos.com`) permanecen 100% autóctonas con email y contraseña bcrypt.
+   - Guía técnica en [`Docs/guia_configuracion_google_oauth.md`](file:///c:/Users/user/Desktop/app-norte2.0/Docs/guia_configuracion_google_oauth.md).
+2. **Hogar Compartido & Cuentas Vinculadas (División 60/40):**
+   - Tablas `households` y `household_members` en PostgreSQL con migración ejecutada `0001_colossal_mephisto.sql`.
+   - Endpoints `/api/household` y `/api/household/accept` para crear hogar, invitar a pareja (`partnerEmail`) y aceptar/rechazar invitaciones.
+   - Carga unificada: un solo registro en BD genera la imputación automática del 60% en la cuenta de Juan y del 40% en la de Yeli sin duplicar datos.
+   - Panel de gestión en [`src/app/settings/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/settings/page.jsx) y banner de invitación en Dashboard.
+3. **Aumentos de Alquiler y Servicios con Vigencia Temporal:**
+   - Endpoint [`src/app/api/expenses/[id]/increase/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/expenses/[id]/increase/route.js) y modal interactivo [`src/components/IncreaseModal.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/components/IncreaseModal.jsx).
+   - Cierre de vigencia del período anterior y apertura del nuevo monto a partir del mes indicado (`effectiveMonth`), conservando inalterados los meses históricos previos.
+4. **Checklist de Pagos Mensuales Interactivo:**
+   - Tabla `expense_payments` y endpoint `/api/expenses/payments` para tildar `[✓] Pagado` por mes y por usuario.
+   - Barra de flujo de caja en [`src/app/expenses/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/expenses/page.jsx) (*Total Obligaciones*, *✅ Ya Cancelado*, *⏳ Pendiente por Desembolsar*).
+   - Reporte de Telegram actualizado con desglose de pagos cancelados vs pendientes.
+5. **Manual de Usuario Completo:**
+   - Creado [`Docs/manual_de_usuario.md`](file:///c:/Users/user/Desktop/app-norte2.0/Docs/manual_de_usuario.md) con guía paso a paso, captura de conceptos, configuración de hogar, aumentos y bot de Telegram.
+
+---
+
 ## ⏳ Fases Siguientes
 
-### ⚪ FASE 4: Despliegue en Cloudflare Pages & Neon PostgreSQL
+### ⚪ FASE 5: Despliegue en Cloudflare Pages & Neon PostgreSQL
 * Configuración de `@cloudflare/next-on-pages` / Cloudflare OpenNext.
-* Variables de entorno en Cloudflare Dashboard (`DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `CRON_SECRET`, `JWT_SECRET`).
-* Configuración del Webhook de Telegram (`setWebhook`) y disparador de Cron diario (`wrangler.toml` o Cloudflare Cron Triggers).
+* Variables de entorno en Cloudflare Dashboard (`DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `CRON_SECRET`, `JWT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`).
+* Configuración del Webhook de Telegram (`setWebhook`) y disparador de Cron diario en Cloudflare.
 
