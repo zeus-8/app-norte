@@ -65,7 +65,12 @@
 5. **Motor de Alertas Programadas Cron ([`src/app/api/cron/send-alerts/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/cron/send-alerts/route.js)):**
    - Procesamiento automatizado diario protegido por `CRON_SECRET`.
    - Disparo individualizado según los días de anticipación elegidos por cada chofer.
-6. **Verificación de Build:**
+6. **Migración e Importación de Datos Legacy ([`src/db/migrate-from-sqlite.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/db/migrate-from-sqlite.js)):**
+   - Script automatizado `npm run db:import-sqlite` para importar toda la base de datos `gastos.db` (SQLite) a PostgreSQL `norte2`.
+   - Conversión de horas decimales a minutos exactos (`minutes_worked`).
+   - Mapeo de ingresos al nuevo esquema multiapp.
+   - Migración completa de: 6 jornadas de trabajo, 13 mantenimientos vehiculares, 2 registros de historial de services, 16 gastos fijos/cuotas y configuraciones.
+7. **Verificación de Build:**
    - `npm run build` ✅ Compilación exitosa (17 rutas, 14 API endpoints, middleware y 0 errores).
 
 ---

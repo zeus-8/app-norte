@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Navbar from '@/components/Navbar';
 import { 
   User, 
   Car, 
@@ -10,7 +11,6 @@ import {
   Key, 
   CheckCircle2, 
   AlertTriangle, 
-  ArrowLeft, 
   Save, 
   ExternalLink,
   ShieldCheck,
@@ -21,15 +21,14 @@ import {
   Zap,
   HelpCircle
 } from 'lucide-react';
-import ThemeToggle from '@/components/ThemeToggle';
 
 const AVAILABLE_APPS = [
   { id: 'uber', name: 'Uber', color: '#000000', badgeClass: 'badge-blue' },
   { id: 'cabify', name: 'Cabify', color: '#7145d6', badgeClass: 'badge-purple' },
-  { id: 'didi', name: 'DiDi', color: '#ff7d00', badgeClass: 'badge-warning' },
+  { id: 'didi', name: 'DiDi', color: '#ff7d00', badgeClass: 'badge-yellow' },
   { id: 'indrive', name: 'InDrive', color: '#88cf00', badgeClass: 'badge-green' },
-  { id: 'rappi', name: 'Rappi', color: '#ff441f', badgeClass: 'badge-danger' },
-  { id: 'pedidosya', name: 'PedidosYa', color: '#ea044e', badgeClass: 'badge-danger' },
+  { id: 'rappi', name: 'Rappi', color: '#ff441f', badgeClass: 'badge-red' },
+  { id: 'pedidosya', name: 'PedidosYa', color: '#ea044e', badgeClass: 'badge-red' },
 ];
 
 export default function SettingsPage() {
@@ -218,48 +217,42 @@ export default function SettingsPage() {
   const directTelegramLink = `https://t.me/${botUsername}?start=${user?.id || ''}`;
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '24px 16px' }}>
-      
-      {/* Top Header */}
+    <div className="app-container">
+      {/* Navbar Global con todas las pestañas */}
+      <Navbar user={user} />
+
+      {/* Header de Configuración */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Link href="/dashboard" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <ArrowLeft size={16} /> Volver al Panel
-          </Link>
-          <div>
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>Configuración y Preferencias</span>
-            </h1>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-              Ajustá tus aplicaciones de trabajo, perfil operativo y bot de Telegram.
-            </div>
+        <div>
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>Configuración y Preferencias</span>
+          </h1>
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-dim)' }}>
+            Ajustá tus aplicaciones de trabajo, modalidad operativa y bot de Telegram.
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <ThemeToggle />
-          <button 
-            type="button" 
-            onClick={handleSaveProfile} 
-            disabled={saving} 
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-          >
-            <Save size={16} />
-            {saving ? 'Guardando...' : 'Guardar Cambios'}
-          </button>
-        </div>
+        <button 
+          type="button" 
+          onClick={handleSaveProfile} 
+          disabled={saving} 
+          className="btn btn-primary"
+          style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          <Save size={16} />
+          {saving ? 'Guardando...' : 'Guardar Cambios'}
+        </button>
       </div>
 
       {/* Global Alerts */}
       {successMsg && (
-        <div className="card" style={{ padding: '14px 18px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--accent-green)', color: 'var(--accent-green)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="card" style={{ padding: '14px 18px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--accent-emerald)', color: 'var(--accent-emerald)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
           <CheckCircle2 size={18} />
           <span style={{ fontWeight: 600 }}>{successMsg}</span>
         </div>
       )}
       {errorMsg && (
-        <div className="card" style={{ padding: '14px 18px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--accent-red)', color: 'var(--accent-red)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="card" style={{ padding: '14px 18px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--accent-rose)', color: 'var(--accent-rose)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
           <AlertTriangle size={18} />
           <span style={{ fontWeight: 600 }}>{errorMsg}</span>
         </div>
@@ -271,9 +264,9 @@ export default function SettingsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
           {/* Card: Modalidad Operativa */}
-          <div className="card" style={{ padding: '22px' }}>
+          <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6' }}>
+              <div className="kpi-icon-wrap" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
                 <Car size={18} />
               </div>
               <div>
@@ -304,7 +297,7 @@ export default function SettingsPage() {
                   Auto Propio
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', lineHeight: 1.3 }}>
-                  Vos cubrís el mantenimiento, VTV, GNC, cubiertas y fondo de provisión para repuestos.
+                  Cubrís el mantenimiento, VTV, GNC, cubiertas y provisión para repuestos.
                 </div>
               </div>
 
@@ -336,14 +329,14 @@ export default function SettingsPage() {
           </div>
 
           {/* Card: Apps de Trabajo */}
-          <div className="card" style={{ padding: '22px' }}>
+          <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(168, 85, 247, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a855f7' }}>
+              <div className="kpi-icon-wrap" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7' }}>
                 <Smartphone size={18} />
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>Plataformas & Apps de Trabajo</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Seleccioná las aplicaciones que utilizás para desglosar tus ingresos</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Seleccioná las aplicaciones que utilizás</div>
               </div>
             </div>
 
@@ -382,9 +375,9 @@ export default function SettingsPage() {
           </div>
 
           {/* Card: Datos Personales */}
-          <div className="card" style={{ padding: '22px' }}>
+          <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+              <div className="kpi-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
                 <User size={18} />
               </div>
               <div>
@@ -423,20 +416,20 @@ export default function SettingsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
           {/* Card: Integración de Telegram */}
-          <div className="card" style={{ padding: '22px', border: telegramEnabled ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border-color)' }}>
+          <div className="card" style={{ border: telegramEnabled ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 8, background: 'linear-gradient(135deg, #229ED9 0%, #0088cc 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'linear-gradient(135deg, #229ED9 0%, #0088cc 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
                   <Send size={18} />
                 </div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>Bot de Telegram</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Alertas de cierre de mes y services</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Alertas de fin de mes y vencimientos</div>
                 </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: telegramEnabled ? 'var(--accent-green)' : 'var(--text-dim)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: telegramEnabled ? 'var(--accent-emerald)' : 'var(--text-dim)' }}>
                   <input 
                     type="checkbox" 
                     checked={telegramEnabled} 
@@ -452,10 +445,10 @@ export default function SettingsPage() {
             <div style={{ padding: '14px', background: 'rgba(0, 136, 204, 0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(0, 136, 204, 0.2)', marginBottom: 16 }}>
               <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#229ED9', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Zap size={14} />
-                <span>Vinculación Automática en 1-Click</span>
+                <span>Vinculación Automática</span>
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-main)', marginBottom: 10, lineHeight: 1.4 }}>
-                Hacé clic en el siguiente enlace para abrir el bot en tu Telegram y conectar tu cuenta al instante:
+                Abrí el bot en tu Telegram y pulsa <b>Iniciar</b> para conectar tu cuenta:
               </div>
               <a 
                 href={directTelegramLink} 
@@ -485,7 +478,7 @@ export default function SettingsPage() {
                 <label className="label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span>Tu Chat ID de Telegram</span>
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                    (Obtenelo enviando /chatid al bot)
+                    (Obtenelo con @userinfobot)
                   </span>
                 </label>
                 <input 
@@ -498,7 +491,7 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <label className="label">¿Cuándo querés recibir el reporte de fin de mes?</label>
+                <label className="label">Frecuencia de Alerta de Cierre</label>
                 <select 
                   className="input" 
                   value={telegramAlertDays} 
@@ -532,8 +525,8 @@ export default function SettingsPage() {
                     borderRadius: 'var(--radius-sm)',
                     fontSize: '0.75rem',
                     background: testResult.success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                    border: `1px solid ${testResult.success ? 'var(--accent-green)' : 'var(--accent-red)'}`,
-                    color: testResult.success ? 'var(--accent-green)' : 'var(--accent-red)',
+                    border: `1px solid ${testResult.success ? 'var(--accent-emerald)' : 'var(--accent-rose)'}`,
+                    color: testResult.success ? 'var(--accent-emerald)' : 'var(--accent-rose)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
@@ -547,9 +540,9 @@ export default function SettingsPage() {
           </div>
 
           {/* Card: Seguridad y Cambio de Contraseña */}
-          <div className="card" style={{ padding: '22px' }}>
+          <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
+              <div className="kpi-icon-wrap" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>
                 <Key size={18} />
               </div>
               <div>
@@ -560,12 +553,12 @@ export default function SettingsPage() {
 
             <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {passwordSuccess && (
-                <div style={{ padding: '8px 12px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-green)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem' }}>
+                <div style={{ padding: '8px 12px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-emerald)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem' }}>
                   {passwordSuccess}
                 </div>
               )}
               {passwordError && (
-                <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-red)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem' }}>
+                <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-rose)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem' }}>
                   {passwordError}
                 </div>
               )}

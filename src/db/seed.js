@@ -1,4 +1,6 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
+dotenv.config({ path: '.env' });
 import bcrypt from 'bcryptjs';
 import { db } from './index.js';
 import { users, vehicleMaintenance, expenses, dailyLogs, userSettings } from './schema.js';

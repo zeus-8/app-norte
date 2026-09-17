@@ -1,4 +1,7 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
+dotenv.config({ path: '.env' });
+
 import { defineConfig } from 'drizzle-kit';
 
 export default defineConfig({
@@ -6,6 +9,6 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/gastos_db',
+    url: process.env.DATABASE_URL || 'postgres://postgres:root@localhost:5432/norte2',
   },
 });
