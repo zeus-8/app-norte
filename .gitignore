@@ -29,6 +29,7 @@ yarn-error.log*
 # Vercel & Cloudflare
 .vercel
 .wrangler
+.open-next
 
 # System & IDE files
 .DS_Store

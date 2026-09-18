@@ -9,7 +9,7 @@ export async function DELETE(request, { params }) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const { id } = params;
+    const { id } = await params;
     await db.delete(dailyLogs).where(and(eq(dailyLogs.id, id), eq(dailyLogs.userId, user.id)));
 
     return NextResponse.json({ success: true });

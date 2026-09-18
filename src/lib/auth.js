@@ -42,7 +42,7 @@ export async function verifySessionToken(token) {
 
 // Obtener sesión del usuario actual desde cookies
 export async function getCurrentUser() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
 
@@ -63,8 +63,8 @@ export async function getCurrentUser() {
 export const getUserFromSession = getCurrentUser;
 
 // Guardar cookie de sesión
-export function setSessionCookie(token) {
-  const cookieStore = cookies();
+export async function setSessionCookie(token) {
+  const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -75,7 +75,7 @@ export function setSessionCookie(token) {
 }
 
 // Eliminar cookie de sesión
-export function removeSessionCookie() {
-  const cookieStore = cookies();
+export async function removeSessionCookie() {
+  const cookieStore = await cookies();
   cookieStore.delete(COOKIE_NAME);
 }

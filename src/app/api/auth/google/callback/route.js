@@ -119,7 +119,7 @@ export async function GET(request) {
       role: finalUser.role,
     });
 
-    setSessionCookie(token);
+    await setSessionCookie(token);
 
     return NextResponse.redirect(`${appUrl}/dashboard`);
   } catch (error) {

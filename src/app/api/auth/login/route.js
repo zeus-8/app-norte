@@ -47,7 +47,7 @@ export async function POST(request) {
     });
 
     // Guardar cookie httpOnly
-    setSessionCookie(token);
+    await setSessionCookie(token);
 
     const { passwordHash, ...userSafe } = user;
     return NextResponse.json({ success: true, user: userSafe });

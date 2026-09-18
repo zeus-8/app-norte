@@ -13,7 +13,7 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     const updates = {};
@@ -45,7 +45,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     if (id === currentUser.id) {
       return NextResponse.json({ error: 'No puedes eliminar tu propia cuenta de administrador' }, { status: 400 });
     }

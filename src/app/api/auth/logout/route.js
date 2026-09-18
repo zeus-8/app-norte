@@ -2,6 +2,6 @@ import { NextResponse } from 'next/server';
 import { removeSessionCookie } from '@/lib/auth.js';
 
 export async function POST() {
-  removeSessionCookie();
+  await removeSessionCookie();
   return NextResponse.json({ success: true, message: 'Sesión cerrada correctamente' });
 }

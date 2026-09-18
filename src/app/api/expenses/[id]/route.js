@@ -18,7 +18,7 @@ export async function PUT(request, { params }) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const validation = expenseSchema.safeParse(body);
     if (!validation.success) {
@@ -66,7 +66,7 @@ export async function DELETE(request, { params }) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const { id } = params;
+    const { id } = await params;
     await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.userId, user.id)));
 
     return NextResponse.json({ success: true });

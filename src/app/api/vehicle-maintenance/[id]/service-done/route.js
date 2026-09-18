@@ -10,7 +10,7 @@ export async function POST(request, { params }) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const validation = serviceDoneSchema.safeParse({ ...body, maintenanceId: id });
     if (!validation.success) {

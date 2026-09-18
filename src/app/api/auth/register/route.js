@@ -78,7 +78,7 @@ export async function POST(request) {
       role: newUser.role,
     });
 
-    setSessionCookie(token);
+    await setSessionCookie(token);
 
     const { passwordHash: _, ...userSafe } = newUser;
     return NextResponse.json({ success: true, user: userSafe });
