@@ -1,107 +1,133 @@
-# 📌 Estado Actual del Proyecto y Bitácora de Continuidad
+# 📌 Estado Actual del Proyecto, Arquitectura y Bitácora de Modificaciones
 
-**Última actualización:** 2026-09-17  
-**Proyecto:** AutoGastos SaaS (Next.js 14 + PostgreSQL + Drizzle ORM + Cloudflare)  
-**Ubicación:** `c:\Users\user\Desktop\app-norte2.0`  
-**Estado General:** Fase 1 y Fase 2 Completadas con Éxito (`npm run build` ✅ 0 Errores)  
-**Documento Maestro:** [`Docs/plan_maestro_migracion_saas_gastos.md`](file:///c:/Users/user/Desktop/app-norte2.0/Docs/plan_maestro_migracion_saas_gastos.md)
-
----
-
-## ✅ Fases Completadas
-
-### 🟢 FASE 1: Setup del Proyecto y Base de Datos Multi-Tenant (COMPLETADA)
-1. **Framework:** Next.js 14 (App Router) inicializado y validado con `npm run build` (0 errores).
-2. **Base de Datos & ORM:** Drizzle ORM configurado con PostgreSQL (`src/db/index.js` y `src/db/schema.js`).
-3. **Esquema Multi-Tenant:**
-   - `users`: Soporte SaaS, roles (`admin`/`user`), modalidad (`owner` auto propio vs `renter` auto alquilado), apps activas (`['uber', 'cabify', 'didi', 'rappi']`), feature flags de módulos, preferencia de tema Dark/Light y Telegram Chat ID.
-   - `daily_logs`: Registro multiapp con desglose JSON, campo de **minutos exactos (`minutes_worked`)** para medir ej. `5h 47m`, combustible y odómetro.
-   - `vehicle_maintenance` & `maintenance_history`: Mantenimiento vehicular dual (por km, por tiempo anual/bimestral [VTV, GNC, Patente] e híbrido).
-   - `expenses`: Gastos fijos, compras en cuotas sin interés y división compartida del hogar.
-   - `user_settings`: Ajustes clave-valor por usuario.
-4. **Migraciones:** Generada `drizzle/0000_yielding_scarlet_witch.sql`.
-5. **Seed:** Script `src/db/seed.js` con Admin (`admin@autogastos.com` / `admin123`) y Chofer Demo (`juan@chofer.com` / `juan123`).
-6. **Entorno:** `.env.example` y `.env.local` configurados.
+**Última actualización:** 2026-09-19  
+**Proyecto:** AutoGastos SaaS (App Norte 2.0)  
+**Entorno de Producción:** Cloudflare Workers (OpenNext) + Supabase PostgreSQL  
+**Repositorios / Workspaces:** `c:\Users\user\Desktop\app-norte2.0` / `c:\Users\user\Desktop\app-gastos`  
+**Estado General:** Fase 1 a Fase 4 100% Funcionales. Fase 5 (Despliegue & Supabase) en curso. Build Cloudflare ✅ Exitoso (código 0).
 
 ---
 
-### 🟢 FASE 2: Autenticación, Tema y Módulos de Usuario (COMPLETADA)
-1. **Autenticación Multi-Tenant (JWT + Bcrypt):**
-   - Módulo de sesiones seguras en [`src/lib/auth.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/lib/auth.js) con cookies httpOnly (`autogastos_session`).
-   - Validaciones de entrada con Zod en [`src/lib/validations.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/lib/validations.js) (mensajes explícitos en español).
-   - Endpoints API de Auth: `/api/auth/login`, `/api/auth/register`, `/api/auth/me`, `/api/auth/logout`.
-   - Middleware de protección de rutas en [`src/middleware.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/middleware.js) protegiendo `/dashboard`, `/driver`, `/expenses`, `/vehicle` y `/admin`.
-   - Vistas de Login ([`src/app/login/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/login/page.jsx)) y Registro ([`src/app/register/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/register/page.jsx)) con selector de Auto Propio vs Alquilado y multiapps.
-2. **Tema Claro / Oscuro con Persistencia:**
-   - Componente [`src/components/ThemeToggle.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/components/ThemeToggle.jsx) y endpoint `/api/user/preferences`.
-3. **Módulo de Jornadas Multiapp:**
-   - Vista en [`src/app/driver/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/driver/page.jsx) y modal [`src/components/DailyLogModal.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/components/DailyLogModal.jsx) con **Horas y Minutos exactos (`minutes_worked`)**, rendimiento por hora (`$/h`) y desglose multiapp.
-4. **Módulo de Gastos & Proyección de Cuotas:**
-   - Vista en [`src/app/expenses/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/expenses/page.jsx) y modal [`src/components/ExpenseModal.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/components/ExpenseModal.jsx) con proyección a 12 meses vista y división de gastos compartidos del hogar.
-5. **Módulo de Mantenimiento Vehicular:**
-   - Vista en [`src/app/vehicle/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/vehicle/page.jsx) con soporte adaptativo para **Auto Propio** (semáforo, VTV, GNC, Patente, fondo de repuestos) vs **Auto Alquilado** (canon de alquiler).
-6. **Dashboard Principal:**
-   - Vista en [`src/app/dashboard/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/dashboard/page.jsx) con KPIs consolidados y Termómetro de Metas ([`src/components/GoalThermometer.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/components/GoalThermometer.jsx)).
+## 🎯 1. Resumen Ejecutivo del Negocio
+
+**AutoGastos SaaS** es una solución web integral y multi-tenant orientada a choferes de movilidad y logística urbana (Uber, Cabify, DiDi, InDrive, Rappi, PedidosYa) y gestión de finanzas compartidas del hogar en Argentina.
+
+### Capacidades Clave
+1. **Control de Jornadas Multiapp:** Registro diario con desglose por aplicación, cálculo de minutos exactos trabajados (`minutes_worked`, ej. `5h 47m`), combustible, odómetro y rendimiento neto en tiempo real en pesos por hora (`$/h`).
+2. **Finanzas Personales & Hogar Compartido:** Gestión de gastos fijos y compras en cuotas con proyección a 12 meses vista, checklist interactivo mensual de pagos cancelados vs pendientes y división porcentual automática en parejas/familias (ej. 60% Juan / 40% Yeli) sin duplicar datos.
+3. **Mantenimiento Vehicular Preventivo:** Semáforos preventivos adaptados para **Auto Propio** (control dual por kilometraje y tiempo para VTV, GNC, Patente y services mecánicos con fondo de reserva de $100.000/mes) o **Auto Alquilado** (canon periódico de alquiler).
+4. **Termómetro Financiero:** Enfoque visual de metas mensuales en el Dashboard: punto de equilibrio básico vs meta esperada de rentabilidad.
+5. **Automatización & Bot de Telegram:** Notificaciones diarias/mensuales, comandos interactivos (`/resumen`, `/jornada`, `/pagos`, `/chatid`), sincronización vía webhook y alertas mecánicas según días de anticipación elegidos por cada usuario.
+6. **Panel de Administración:** Control SaaS con métricas globales y Feature Flags por chofer para activar o restringir módulos de forma independiente.
 
 ---
 
-### 🟢 FASE 3: Panel de Administración, Configuración & Bot de Telegram (COMPLETADA)
-1. **Panel de Administración & Feature Flags ([`src/app/admin/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/admin/page.jsx)):**
-   - Gestión integral de suscriptores y estados de cuenta (Prueba / Activo / Suspendido).
-   - Toggles en tiempo real de Feature Flags por usuario (`moduleDriver`, `moduleExpenses`, `moduleVehicle`).
-   - Métricas globales del SaaS en `/api/admin/stats` y CRUD en `/api/admin/users`.
-2. **Página de Configuración y Perfil ([`src/app/settings/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/settings/page.jsx)):**
-   - Configuración de modalidad operativa: **Auto Propio** vs **Auto Alquilado**.
-   - Selector interactivo de aplicaciones activas (`uber`, `cabify`, `didi`, `indrive`, `rappi`, `pedidosya`).
-   - Panel de vinculación de Telegram con botón de enlace 1-click (`t.me/Bot?start=ID`), selector de anticipación de alertas (1 a 10 días) y botón de prueba en vivo.
-   - Cambio seguro de contraseña con validación de hash bcrypt.
-   - Endpoint de perfil en `/api/user/profile`.
-3. **Servicio y Formateador de Telegram ([`src/lib/telegram.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/lib/telegram.js)):**
-   - Formato enriquecido en HTML con reporte de jornadas multiapp, horas trabajadas (`5h 47m`), combustible, ganancia neta limpia, rendimiento $/h, gastos fijos, cuotas, balance libre y semáforo de vencimientos vehiculares (VTV, GNC, Aceite).
-   - Modo de simulación inteligente si `TELEGRAM_BOT_TOKEN` no está cargado.
-4. **Webhook y Comandos de Telegram ([`src/app/api/telegram/webhook/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/telegram/webhook/route.js)):**
-   - Soporte para comando `/start <token>` para auto-vincular la cuenta del chofer con su Chat ID.
-   - Soporte para comando `/resumen` para consultar el balance en tiempo real y `/chatid` para obtener el ID.
-5. **Motor de Alertas Programadas Cron ([`src/app/api/cron/send-alerts/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/cron/send-alerts/route.js)):**
-   - Procesamiento automatizado diario protegido por `CRON_SECRET`.
-   - Disparo individualizado según los días de anticipación elegidos por cada chofer.
-6. **Migración e Importación de Datos Legacy ([`src/db/migrate-from-sqlite.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/db/migrate-from-sqlite.js)):**
-   - Script automatizado `npm run db:import-sqlite` para importar toda la base de datos `gastos.db` (SQLite) a PostgreSQL `norte2`.
-   - Conversión de horas decimales a minutos exactos (`minutes_worked`).
-   - Mapeo de ingresos al nuevo esquema multiapp.
-   - Migración completa de: 6 jornadas de trabajo, 13 mantenimientos vehiculares, 2 registros de historial de services, 16 gastos fijos/cuotas y configuraciones.
-7. **Verificación de Build:**
-   - `npm run build` ✅ Compilación exitosa (17 rutas, 14 API endpoints, middleware y 0 errores).
+## 💻 2. Stack Tecnológico & Infraestructura
+
+| Capa | Tecnología | Versión / Detalle | Justificación |
+|---|---|---|---|
+| **Framework Fullstack** | Next.js (App Router, Turbopack) | `16.3.5` | SSR eficiente, server actions y soporte de rutas API dinámicas. |
+| **Biblioteca UI** | React | `19.3.0` | Hooks modernos, concurrencia y alto rendimiento en interfaz. |
+| **Estilos & Apariencia** | CSS Vanilla (Design System) + Lucide Icons | N/A | Total control de rendimiento, microinteracciones y modo Dark/Light nativo con persistencia. |
+| **ORM & Modelado** | Drizzle ORM + Drizzle Kit | `0.38.3` / `0.30.1` | Tipado TypeScript/JS estricto, queries SQL livianas y migraciones determinísticas. |
+| **Base de Datos** | PostgreSQL (Supabase) | 16+ / 17 | Base de datos relacional robusta con connection pooling (Transaction Pooler en puerto 6543 / Session en 5432). |
+| **Edge & Despliegue** | Cloudflare Workers (`@opennextjs/cloudflare`) | `1.20.6` | Despliegue global serverless en edge, baja latencia y bajo costo de mantenimiento. |
+| **CLI de Despliegue** | Wrangler | `4.135.0` (`nodejs_compat`, `compatibility_date: 2025-01-01`) | Herramienta oficial de Cloudflare para workers y bindings. |
+| **Autenticación** | JWT (`jose`) + `bcryptjs` + Google OAuth 2.0 | `jose@5.9.6`, `bcryptjs@2.4.3` | Sesiones en cookies `httpOnly`, criptografía Web Crypto nativa compatible con Cloudflare Workers. |
+| **Validación de Datos** | Zod | `3.24.1` | Validación estricta en esquemas de entrada de API con mensajes explícitos en español. |
 
 ---
 
-### 🟢 FASE 4: Suite Financiera Avanzada, Google OAuth & Hogar Compartido (COMPLETADA)
-1. **Google OAuth 2.0 (Acceso con 1 Clic):**
-   - Integración nativa en [`src/lib/google-auth.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/lib/google-auth.js), [`src/app/api/auth/google/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/auth/google/route.js) y [`src/app/api/auth/google/callback/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/auth/google/callback/route.js).
-   - Auto-aprovisionamiento de nuevos usuarios con `role: 'user'` y catálogo vehicular argentino precargado.
-   - Restricción de seguridad: Cuentas de Administrador (`admin@autogastos.com`) permanecen 100% autóctonas con email y contraseña bcrypt.
-   - Guía técnica en [`Docs/guia_configuracion_google_oauth.md`](file:///c:/Users/user/Desktop/app-norte2.0/Docs/guia_configuracion_google_oauth.md).
-2. **Hogar Compartido & Cuentas Vinculadas (División 60/40):**
-   - Tablas `households` y `household_members` en PostgreSQL con migración ejecutada `0001_colossal_mephisto.sql`.
-   - Endpoints `/api/household` y `/api/household/accept` para crear hogar, invitar a pareja (`partnerEmail`) y aceptar/rechazar invitaciones.
-   - Carga unificada: un solo registro en BD genera la imputación automática del 60% en la cuenta de Juan y del 40% en la de Yeli sin duplicar datos.
-   - Panel de gestión en [`src/app/settings/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/settings/page.jsx) y banner de invitación en Dashboard.
-3. **Aumentos de Alquiler y Servicios con Vigencia Temporal:**
-   - Endpoint [`src/app/api/expenses/[id]/increase/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/expenses/[id]/increase/route.js) y modal interactivo [`src/components/IncreaseModal.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/components/IncreaseModal.jsx).
-   - Cierre de vigencia del período anterior y apertura del nuevo monto a partir del mes indicado (`effectiveMonth`), conservando inalterados los meses históricos previos.
-4. **Checklist de Pagos Mensuales Interactivo:**
-   - Tabla `expense_payments` y endpoint `/api/expenses/payments` para tildar `[✓] Pagado` por mes y por usuario.
-   - Barra de flujo de caja en [`src/app/expenses/page.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/expenses/page.jsx) (*Total Obligaciones*, *✅ Ya Cancelado*, *⏳ Pendiente por Desembolsar*).
-   - Reporte de Telegram actualizado con desglose de pagos cancelados vs pendientes.
-5. **Manual de Usuario Completo:**
-   - Creado [`Docs/manual_de_usuario.md`](file:///c:/Users/user/Desktop/app-norte2.0/Docs/manual_de_usuario.md) con guía paso a paso, captura de conceptos, configuración de hogar, aumentos y bot de Telegram.
+## 🗄️ 3. Modelo de Datos (PostgreSQL / Drizzle Schema)
+
+Esquema ubicado en [`src/db/schema.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/db/schema.js):
+
+1. **`users`:** Suscriptor SaaS, email, hash bcrypt, rol (`admin` | `user`), Google OAuth ID/avatar, modalidad (`owner` | `renter`), apps activas en JSON, feature flags (`moduleDriver`, `moduleExpenses`, `moduleVehicle`), tema (`dark` | `light`), Telegram chat ID, anticipación de alertas y estado de suscripción (`trial`, `active`, `suspended`).
+2. **`households` & `household_members`:** Grupos familiares/parejas con porcentajes de división asignados (ej. 60.00 / 40.00) y estados de invitación (`pending`, `accepted`).
+3. **`daily_logs`:** Registro diario por chofer (`userId` + `date` único), ingreso bruto, desglose JSON por app, combustible, otros gastos, odómetro, minutos totales trabajados (`minutes_worked`) y cantidad de viajes.
+4. **`vehicle_maintenance` & `maintenance_history`:** Tareas preventivas con seguimiento por km, por tiempo o híbrido, vencimientos fijos de patente/GNC, último service y registro histórico de gastos en talleres.
+5. **`expenses`:** Gastos fijos, compras en cuotas o únicos, mes inicio/fin, día de vencimiento, método de pago, vinculación a hogar compartido y porcentaje de imputación.
+6. **`expense_payments`:** Checklist interactivo mensual (`expenseId` + `userId` + `month` único) para registrar qué cuotas ya fueron desembolsadas en el mes corriente.
+7. **`user_settings`:** Almacenamiento clave-valor de configuración personalizada por usuario (ej. `current_odometer`).
 
 ---
 
-## ⏳ Fases Siguientes
+## 🛠️ 4. Bitácora Técnica de Modificaciones & Fixes Realizados
 
-### ⚪ FASE 5: Despliegue en Cloudflare Pages & Neon PostgreSQL
-* Configuración de `@cloudflare/next-on-pages` / Cloudflare OpenNext.
-* Variables de entorno en Cloudflare Dashboard (`DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `CRON_SECRET`, `JWT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`).
-* Configuración del Webhook de Telegram (`setWebhook`) y disparador de Cron diario en Cloudflare.
+Esta sección detalla cada problema técnico encontrado durante el ciclo de desarrollo y cómo fue resuelto para garantizar que cualquier desarrollador o sistema de IA comprenda el estado del código.
 
+### 🔴 Fix Crítico #1: Error de Empaquetado Cloudflare (`pg-cloudflare`)
+- **Síntoma / Error:**  
+  Al ejecutar `npm run build:cloudflare` (`opennextjs-cloudflare build`), el proceso fallaba en el paso de esbuild con:  
+  `✘ [ERROR] Could not resolve "pg-cloudflare"`  
+  `The module "./dist/index.js" was not found on the file system: .open-next/server-functions/default/node_modules/pg-cloudflare/package.json:16:19`
+- **Causa Raíz:**  
+  La librería `pg` (node-postgres) incluye un `require('pg-cloudflare')` condicional en tiempo de ejecución. El trazador de archivos de Next.js (`@vercel/nft`) detectaba el paquete pero únicamente copiaba `package.json` a la carpeta temporal de la función del servidor, omitiendo los binarios compilados en `dist/`.
+- **Solución Aplicada:**
+  1. En [`next.config.mjs`](file:///c:/Users/user/Desktop/app-norte2.0/next.config.mjs), se configuró `outputFileTracingIncludes` para forzar la inclusión completa del paquete:
+     ```javascript
+     outputFileTracingIncludes: {
+       '**/*': [
+         './node_modules/pg-cloudflare/**/*',
+       ],
+     }
+     ```
+  2. En [`package.json`](file:///c:/Users/user/Desktop/app-norte2.0/package.json) y [`package-lock.json`](file:///c:/Users/user/Desktop/app-norte2.0/package-lock.json), se agregó `"pg-cloudflare": "^1.1.1"` como dependencia directa de producción para que `npm ci` en los runners de Cloudflare lo instale con certeza.
+  3. En [`wrangler.jsonc`](file:///c:/Users/user/Desktop/app-norte2.0/wrangler.jsonc), se actualizó `compatibility_date` a `"2025-01-01"` y se preservó `nodejs_compat`.
+- **Resultado:** Compilación 100% exitosa (`Worker saved in .open-next\worker.js 🚀`, exit code 0).
+
+### 🟢 Fix / Mejora #2: Precisión de Jornadas en Minutos Exactos
+- **Problema:** En versiones anteriores se guardaban horas decimales (ej. 5.75 horas), lo cual provocaba desajustes en el cálculo de rendimiento $/h y confusión en el chofer al cargar jornadas como `5h 47m`.
+- **Solución:** Se estandarizó la columna `minutes_worked` (entero) en la base de datos y se actualizó el modal [`DailyLogModal.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/components/DailyLogModal.jsx) para ingresar Horas y Minutos por separado, convirtiéndolos de forma exacta.
+
+### 🟢 Fix / Mejora #3: Seguridad en Google OAuth & Cuentas Administrativas
+- **Problema:** Riesgo de escalamiento de privilegios o sobreescritura accidental si un usuario iniciaba sesión con Google usando el correo institucional de administración.
+- **Solución:** Se implementó una regla estricta en [`src/app/api/auth/google/callback/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/auth/google/callback/route.js) que bloquea el login social para la cuenta Admin (`admin@autogastos.com`), obligándola a autenticarse exclusivamente con credenciales autóctonas y hash bcrypt. Los usuarios normales creados vía Google se aprovisionan de forma segura con `role: 'user'` y catálogo de servicios vehiculares precargado.
+
+### 🟢 Fix / Mejora #4: Aumentos de Gastos con Preservación Histórica
+- **Problema:** Si un alquiler o servicio aumentaba en marzo, modificar el valor del gasto alteraba retrospectivamente los resúmenes financieros de enero y febrero.
+- **Solución:** Se diseñó el endpoint `/api/expenses/[id]/increase` y el componente [`IncreaseModal.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/components/IncreaseModal.jsx). Este flujo cierra la vigencia del período anterior en el mes inmediatamente anterior al aumento (`endMonth`) y crea un nuevo registro con el monto actualizado a partir del mes indicado (`effectiveMonth`), conservando inalterados los datos históricos.
+
+### 🟢 Fix / Mejora #5: Checklist de Pagos Mensuales (Flujo de Caja)
+- **Problema:** No existía forma de distinguir entre un gasto presupuestado/proyectado y un gasto efectivamente cancelado durante el transcurso del mes.
+- **Solución:** Se incorporó la tabla `expense_payments` y los endpoints `/api/expenses/payments`. La UI de `/expenses` y el reporte de Telegram ahora muestran el desglose en 3 niveles: *Total Obligaciones*, *✅ Ya Cancelado* y *⏳ Pendiente por Desembolsar*.
+
+---
+
+## 🗺️ 5. Hoja de Ruta Inmediata (Roadmap de Trabajo)
+
+Siguiendo las instrucciones del desarrollador, el trabajo se estructura en tres fases estrictamente secuenciales:
+
+```mermaid
+graph LR
+    Paso1[Paso 1: Despliegue Cloudflare Online] --> Paso2[Paso 2: Conexión Supabase PostgreSQL]
+    Paso2 --> Paso3[Paso 3: Ejecución de los 3 Fixes Funcionales]
+```
+
+### Paso 1: Despliegue en Cloudflare (Online)
+- Subir los cambios a GitHub (`master`) y verificar que el build en Cloudflare Pages / Workers finalice sin errores de `pg-cloudflare`.
+- Confirmar que la aplicación renderiza sus vistas estáticas públicas (`/`, `/login`, `/register`).
+
+### Paso 2: Conexión con Base de Datos en Supabase
+- Obtener la cadena de conexión de Supabase (Connection Pooling en puerto 6543 para Serverless o Session en 5432).
+- Configurar `DATABASE_URL` y variables sensibles en el panel de Cloudflare (`JWT_SECRET`, `TELEGRAM_BOT_TOKEN`, `CRON_SECRET`).
+- Aplicar las migraciones del esquema con `drizzle-kit push` o `npm run db:migrate`.
+- Ejecutar el seed inicial para el administrador y usuario demo.
+
+### Paso 3: Análisis y Ejecución de los 3 Fixes Funcionales
+
+#### 🔍 Fix Funcional A: Validación y Guardado de Jornadas Diarias
+- **Hallazgo preliminar:** Se detectó una inconsistencia entre [`DailyLogModal.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/components/DailyLogModal.jsx) y [`src/lib/validations.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/lib/validations.js). El modal envía `minutesWorked: totalMins` (que puede superar 59 cuando son varias horas), mientras que el esquema Zod espera `hoursWorked` y `minutesWorked` (0-59). Además, en el webhook de Telegram, el parser de números toma el primer valor numérico como bruto si no se especifica la palabra clave de la app, lo que confunde el combustible con el ingreso si el usuario tipea en otro orden.
+- **Acción:** Unificar la estructura de payload en frontend, API y webhook para garantizar coherencia absoluta.
+
+#### 🔍 Fix Funcional B: Envío de Gastos por Telegram & Campos Completos
+- **Alcance:** Actualmente Telegram solo soporta comandos de consulta (`/resumen`, `/pagos`) y carga de jornada (`/jornada`).
+- **Acción:** Diseñar e implementar el comando `/gasto` en [`src/app/api/telegram/webhook/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/telegram/webhook/route.js) que permita capturar:
+  - Concepto y monto (ej. `/gasto Super 45000`)
+  - Modalidad: compartido del hogar y porcentaje (ej. `compartido 60%`)
+  - Forma de pago y cuotas (ej. `debito` o `3 cuotas`)
+  - Categoría asignada
+
+#### 🔍 Fix Funcional C: Reflejar Adelantos de Ingresos Acumulados de Uber
+- **Alcance:** Los choferes que solicitan adelantos o retiros inmediatos de Uber antes de la liquidación semanal necesitan registrar la extracción de liquidez sin alterar la facturación bruta real ganada.
+- **Acción:** Incorporar el concepto de "Adelanto / Retiro Inmediato de Apps" en el modelo y en el cálculo del flujo de caja, reflejando el dinero disponible en mano versus el saldo pendiente de liquidar por parte de la plataforma.
