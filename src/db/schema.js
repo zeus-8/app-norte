@@ -161,6 +161,40 @@ export const userSettings = pgTable('user_settings', {
   userKeyIdx: uniqueIndex('user_settings_user_key_idx').on(t.userId, t.key),
 }));
 
+// 10. ADELANTOS Y RETIROS ANTICIPADOS DE APPS (Uber, Cabify, DiDi)
+export const appAdvances = pgTable('app_advances', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  app: varchar('app', { length: 50 }).default('uber').notNull(), // 'uber' | 'cabify' | 'didi' | 'general'
+  amount: numeric('amount', { precision: 12, scale: 2 }).default('0').notNull(),
+  date: varchar('date', { length: 10 }).notNull(), // 'YYYY-MM-DD'
+  month: varchar('month', { length: 7 }).notNull(), // 'YYYY-MM'
+  destination: varchar('payment_destination', { length: 50 }).default('Mercado Pago').notNull(), // 'Mercado Pago' | 'Banco' | 'Efectivo'
+  expenseId: uuid('expense_id').references(() => expenses.id, { onDelete: 'set null' }), // Gasto del mes al que se imputa (opcional)
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// 11. ARQUEOS Y CONCILIACIONES DE CAJA (Realidad vs Sistema)
+export const cashReconciliations = pgTable('cash_reconciliations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  date: varchar('date', { length: 10 }).notNull(), // 'YYYY-MM-DD'
+  month: varchar('month', { length: 7 }).notNull(), // 'YYYY-MM'
+  theoreticalBalance: numeric('theoretical_balance', { precision: 12, scale: 2 }).default('0').notNull(),
+  realCash: numeric('real_cash', { precision: 12, scale: 2 }).default('0').notNull(),
+  realBank: numeric('real_bank', { precision: 12, scale: 2 }).default('0').notNull(),
+  realApps: numeric('real_apps', { precision: 12, scale: 2 }).default('0').notNull(), // Acumulado pendiente en apps (Uber, Cabify...)
+  totalReal: numeric('total_real', { precision: 12, scale: 2 }).default('0').notNull(),
+  difference: numeric('difference', { precision: 12, scale: 2 }).default('0').notNull(),
+  adjustmentType: varchar('adjustment_type', { length: 50 }).default('none').notNull(), // 'none' | 'unrecorded_expense' | 'savings_transfer' | 'direct_adjustment'
+  adjustmentAmount: numeric('adjustment_amount', { precision: 12, scale: 2 }).default('0').notNull(),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // RELACIONES DRIZZLE ORM
 export const usersRelations = relations(users, ({ many }) => ({
   dailyLogs: many(dailyLogs),
@@ -171,6 +205,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   householdsCreated: many(households),
   householdMemberships: many(householdMembers),
   expensePayments: many(expensePayments),
+  appAdvances: many(appAdvances),
+  cashReconciliations: many(cashReconciliations),
 }));
 
 export const householdsRelations = relations(households, ({ one, many }) => ({
@@ -229,6 +265,7 @@ export const expensesRelations = relations(expenses, ({ one, many }) => ({
     references: [households.id],
   }),
   payments: many(expensePayments),
+  advances: many(appAdvances),
 }));
 
 export const expensePaymentsRelations = relations(expensePayments, ({ one }) => ({
@@ -245,6 +282,24 @@ export const expensePaymentsRelations = relations(expensePayments, ({ one }) => 
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
   user: one(users, {
     fields: [userSettings.userId],
+    references: [users.id],
+  }),
+}));
+
+export const appAdvancesRelations = relations(appAdvances, ({ one }) => ({
+  user: one(users, {
+    fields: [appAdvances.userId],
+    references: [users.id],
+  }),
+  expense: one(expenses, {
+    fields: [appAdvances.expenseId],
+    references: [expenses.id],
+  }),
+}));
+
+export const cashReconciliationsRelations = relations(cashReconciliations, ({ one }) => ({
+  user: one(users, {
+    fields: [cashReconciliations.userId],
     references: [users.id],
   }),
 }));

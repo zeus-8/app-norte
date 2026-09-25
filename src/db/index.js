@@ -25,11 +25,18 @@ if (isNeon) {
 } else {
   // En desarrollo con Node.js / Next.js, reutilizar el pool global para evitar agotar conexiones
   if (!globalForDb.pgPool) {
+    const isRemote = connectionString.includes('supabase.co') || 
+                     connectionString.includes('pooler.supabase.com') ||
+                     connectionString.includes('sslmode=') ||
+                     connectionString.includes('.com') ||
+                     process.env.NODE_ENV === 'production';
+
     globalForDb.pgPool = new Pool({
       connectionString,
-      max: 20,
+      ssl: isRemote ? { rejectUnauthorized: false } : undefined,
+      max: 10,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000,
     });
   }
 

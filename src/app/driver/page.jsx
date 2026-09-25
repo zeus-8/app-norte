@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/components/Navbar';
 import DailyLogModal from '@/components/DailyLogModal';
 import OdometerModal from '@/components/OdometerModal';
+import AppAdvanceModal from '@/components/AppAdvanceModal';
+import CashReconciliationModal from '@/components/CashReconciliationModal';
 import { 
   Calendar, 
   DollarSign, 
@@ -14,7 +16,9 @@ import {
   Trash2, 
   Gauge, 
   TrendingUp,
-  Smartphone
+  Smartphone,
+  Scale,
+  Wallet
 } from 'lucide-react';
 
 export default function DriverPage() {
@@ -28,26 +32,42 @@ export default function DriverPage() {
 
   const [dailyLogsData, setDailyLogsData] = useState(null);
   const [vehicleData, setVehicleData] = useState(null);
+  const [advancesData, setAdvancesData] = useState(null);
+  const [summaryData, setSummaryData] = useState(null);
   const [dailyModalOpen, setDailyModalOpen] = useState(false);
   const [editingLog, setEditingLog] = useState(null);
   const [odometerModalOpen, setOdometerModalOpen] = useState(false);
+  const [advanceModalOpen, setAdvanceModalOpen] = useState(false);
+  const [reconciliationModalOpen, setReconciliationModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch('/api/auth/me')
       .then(res => res.json())
-      .then(data => { if (data.authenticated) setUser(data.user); });
+      .then(data => { 
+        if (data.authenticated) {
+          if (data.user.role !== 'admin' && !data.user.moduleDriver) {
+            window.location.href = '/dashboard?restricted=driver';
+            return;
+          }
+          setUser(data.user);
+        }
+      });
   }, []);
 
   const refreshData = useCallback(async () => {
     try {
       setLoading(true);
-      const [logsRes, vehRes] = await Promise.all([
+      const [logsRes, vehRes, advRes, sumRes] = await Promise.all([
         fetch(`/api/daily-logs?month=${currentMonth}`).then(r => r.json()),
         fetch('/api/vehicle-maintenance').then(r => r.json()),
+        fetch(`/api/advances?month=${currentMonth}`).then(r => r.json()),
+        fetch(`/api/summary?month=${currentMonth}`).then(r => r.json()),
       ]);
       setDailyLogsData(logsRes);
       setVehicleData(vehRes);
+      setAdvancesData(advRes);
+      setSummaryData(sumRes);
     } catch (err) {
       console.error(err);
     } finally {
@@ -180,6 +200,126 @@ export default function DriverPage() {
         </div>
       </div>
 
+      {/* Sección de Liquidaciones & Adelantos de Apps */}
+      <div className="card" style={{ marginBottom: 24, padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 'var(--radius-md)', background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#34d399' }}>
+              <Smartphone size={20} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+                Liquidaciones de Apps & Cobros Anticipados (Adelantos)
+              </h3>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Control de dinero facturado vs adelantos retirados antes de la liquidación semanal
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setAdvanceModalOpen(true)}
+              className="btn btn-primary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Plus size={14} />
+              <span>+ Registrar Adelanto</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReconciliationModalOpen(true)}
+              className="btn btn-secondary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Scale size={14} />
+              <span>Arqueo de Caja</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Desglose por Apps */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: advancesData?.advances?.length > 0 ? 16 : 0 }}>
+          {(user?.activeApps?.length > 0 ? user.activeApps : ['uber']).map(appKey => {
+            const keyLower = (appKey || '').toLowerCase();
+            const isDirect = keyLower === 'particular' || keyLower === 'privado';
+            const billed = summaryData?.appBreakdownTotals?.[keyLower] || 0;
+            const adv = advancesData?.byApp?.[keyLower] || 0;
+            const pending = isDirect ? 0 : Math.max(0, billed - adv);
+            return (
+              <div 
+                key={appKey} 
+                style={{ 
+                  background: 'rgba(0, 0, 0, 0.25)', 
+                  border: isDirect ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)', 
+                  borderRadius: 'var(--radius-md)', 
+                  padding: 14 
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontWeight: 800, textTransform: 'capitalize', fontSize: '0.95rem', color: isDirect ? '#34d399' : 'inherit' }}>
+                    {keyLower === 'particular' ? 'Particular / Privado' : appKey}
+                  </span>
+                  <span className={isDirect ? "badge badge-green" : "badge badge-blue"} style={{ fontSize: '0.68rem' }}>
+                    {isDirect ? 'Directo en Mano' : 'Semanal'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span>Facturado en mes:</span>
+                  <strong>${Math.round(billed).toLocaleString('es-AR')}</strong>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span>{isDirect ? 'Cobro inmediato:' : 'Adelantos retirados:'}</span>
+                  <span style={{ color: isDirect ? '#34d399' : '#fbbf24' }}>
+                    {isDirect ? `$${Math.round(billed).toLocaleString('es-AR')}` : `-$${Math.round(adv).toLocaleString('es-AR')}`}
+                  </span>
+                </div>
+                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 800 }}>
+                  <span>{isDirect ? 'Retenido en app:' : 'Pendiente a cobrar:'}</span>
+                  <span style={{ color: isDirect ? 'var(--text-muted)' : '#34d399' }}>
+                    {isDirect ? '$0 (Ya en tu caja)' : `$${Math.round(pending).toLocaleString('es-AR')}`}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Lista de adelantos del mes si existen */}
+        {advancesData?.advances?.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12, marginTop: 12 }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
+              Adelantos Registrados este Mes ({advancesData.advances.length}):
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {advancesData.advances.map(adv => (
+                <div key={adv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.15)', padding: '6px 12px', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 700, textTransform: 'capitalize' }}>{adv.app}</span>
+                    <span style={{ color: '#fbbf24', fontWeight: 800 }}>${Math.round(Number(adv.amount)).toLocaleString('es-AR')}</span>
+                    <span style={{ color: 'var(--text-dim)' }}>({adv.destination} • {adv.date})</span>
+                    {adv.notes && <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>- {adv.notes}</span>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm('¿Eliminar este adelanto?')) return;
+                      await fetch(`/api/advances/${adv.id}`, { method: 'DELETE' });
+                      await refreshData();
+                    }}
+                    style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', padding: 2 }}
+                    title="Eliminar adelanto"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Tabla de Jornadas */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -305,6 +445,23 @@ export default function DriverPage() {
           await refreshData();
         }}
         currentOdometer={vehicleData?.current_odometer}
+      />
+
+      <AppAdvanceModal
+        isOpen={advanceModalOpen}
+        onClose={() => setAdvanceModalOpen(false)}
+        onSaved={refreshData}
+        currentMonth={currentMonth}
+        activeApps={user?.activeApps || ['uber', 'cabify', 'didi']}
+        appBreakdownTotals={summaryData?.appBreakdownTotals || {}}
+        advancesByApp={advancesData?.byApp || {}}
+      />
+
+      <CashReconciliationModal
+        isOpen={reconciliationModalOpen}
+        onClose={() => setReconciliationModalOpen(false)}
+        onSaved={refreshData}
+        currentMonth={currentMonth}
       />
     </div>
   );

@@ -1,10 +1,10 @@
 # 📌 Estado Actual del Proyecto, Arquitectura y Bitácora de Modificaciones
 
-**Última actualización:** 2026-09-19  
+**Última actualización:** 2026-09-24  
 **Proyecto:** AutoGastos SaaS (App Norte 2.0)  
 **Entorno de Producción:** Cloudflare Workers (OpenNext) + Supabase PostgreSQL  
 **Repositorios / Workspaces:** `c:\Users\user\Desktop\app-norte2.0` / `c:\Users\user\Desktop\app-gastos`  
-**Estado General:** Fase 1 a Fase 4 100% Funcionales. Fase 5 (Despliegue & Supabase) en curso. Build Cloudflare ✅ Exitoso (código 0).
+**Estado General:** Fases 1, 2, 3 y 4 (Setup Cloudflare/Supabase, Telegram/Validaciones/Odómetro, Gobernanza SaaS de Módulos, Adelantos & Conciliación de Caja) ✅ 100% COMPLETADAS. Builds Next.js y Cloudflare ✅ Exitosos (código 0). Listo para despliegue final y vinculación de base de datos en producción.
 
 ---
 
@@ -114,20 +114,12 @@ graph LR
 - Aplicar las migraciones del esquema con `drizzle-kit push` o `npm run db:migrate`.
 - Ejecutar el seed inicial para el administrador y usuario demo.
 
-### Paso 3: Análisis y Ejecución de los 3 Fixes Funcionales
+### Paso 3: Estado de Ejecución de Fixes Funcionales (Ver Plan Maestro: Docs/plan_de_trabajo_fixes_y_conciliacion.md)
 
-#### 🔍 Fix Funcional A: Validación y Guardado de Jornadas Diarias
-- **Hallazgo preliminar:** Se detectó una inconsistencia entre [`DailyLogModal.jsx`](file:///c:/Users/user/Desktop/app-norte2.0/src/components/DailyLogModal.jsx) y [`src/lib/validations.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/lib/validations.js). El modal envía `minutesWorked: totalMins` (que puede superar 59 cuando son varias horas), mientras que el esquema Zod espera `hoursWorked` y `minutesWorked` (0-59). Además, en el webhook de Telegram, el parser de números toma el primer valor numérico como bruto si no se especifica la palabra clave de la app, lo que confunde el combustible con el ingreso si el usuario tipea en otro orden.
-- **Acción:** Unificar la estructura de payload en frontend, API y webhook para garantizar coherencia absoluta.
-
-#### 🔍 Fix Funcional B: Envío de Gastos por Telegram & Campos Completos
-- **Alcance:** Actualmente Telegram solo soporta comandos de consulta (`/resumen`, `/pagos`) y carga de jornada (`/jornada`).
-- **Acción:** Diseñar e implementar el comando `/gasto` en [`src/app/api/telegram/webhook/route.js`](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/telegram/webhook/route.js) que permita capturar:
-  - Concepto y monto (ej. `/gasto Super 45000`)
-  - Modalidad: compartido del hogar y porcentaje (ej. `compartido 60%`)
-  - Forma de pago y cuotas (ej. `debito` o `3 cuotas`)
-  - Categoría asignada
-
-#### 🔍 Fix Funcional C: Reflejar Adelantos de Ingresos Acumulados de Uber
-- **Alcance:** Los choferes que solicitan adelantos o retiros inmediatos de Uber antes de la liquidación semanal necesitan registrar la extracción de liquidez sin alterar la facturación bruta real ganada.
-- **Acción:** Incorporar el concepto de "Adelanto / Retiro Inmediato de Apps" en el modelo y en el cálculo del flujo de caja, reflejando el dinero disponible en mano versus el saldo pendiente de liquidar por parte de la plataforma.
+- ✅ **Fix A (Validaciones en todo el sistema):** Esquema Zod unificado en [src/lib/validations.js](file:///c:/Users/user/Desktop/app-norte2.0/src/lib/validations.js) para aceptar minutos acumulados y mensajes de error humanos e intuitivos en todos los modales.
+- ✅ **Fix B (Parser Telegram /jornada, Notas y comando /gasto):** Resuelto el bug de inversión de horas/viajes con parser línea por línea en [src/app/api/telegram/webhook/route.js](file:///c:/Users/user/Desktop/app-norte2.0/src/app/api/telegram/webhook/route.js). Incorporada captura de observaciones (`notas: ...`) y nuevo comando interactivo `/gasto`.
+- ✅ **Fix Crítico de Odómetro (Retroceso automático al eliminar/editar jornada):** Implementado [src/lib/odometer.js](file:///c:/Users/user/Desktop/app-norte2.0/src/lib/odometer.js) con `syncUserOdometer()`. Al borrar o editar una jornada hacia abajo, el odómetro general del auto retrocede al valor real de las jornadas y services restantes, evitando distorsiones en los semáforos de VTV/GNC/Aceite.
+- ✅ **Fase 3 (Gobernanza SaaS de Módulos - Feature Flags):** Restricción de acceso en profundidad (Edge Middleware, Guards React en cliente, Navbar dinámico, Banner explicativo en Dashboard). Solo el Administrador puede activar/desactivar `moduleDriver`, `moduleExpenses` y `moduleVehicle`. La API `/api/user/profile` bloquea modificaciones no autorizadas de módulos.
+- ✅ **Fase 4 (Fix C - Adelantos y Arqueo / Conciliación de Caja):** Modelo de extracciones y retiros inmediatos de Uber/Cabify sin distorsionar facturación de apps, comando `/adelanto` en Telegram Bot, módulo interactivo de Arqueo y Conciliación de Caja (Realidad vs Sistema) con blanqueo automático por gastos no anotados o ajustes directos de ritmo diario.
+- ✅ **Sesión de Pruebas Operativas (Bugs menores corregidos):** Resuelto error de React Hooks en `GoalThermometer`, normalizadas las tarjetas de liquidación para que solo muestren las apps configuradas por el usuario (`user.activeApps`) y conectado el monto de `appBreakdownTotals` en la respuesta JSON de `/api/summary`.
+- 🎯 **Siguiente Paso:** Despliegue en la nube y puesta en marcha de producción con Supabase + Cloudflare Workers.

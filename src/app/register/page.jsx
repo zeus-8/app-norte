@@ -9,9 +9,10 @@ const AVAILABLE_APPS = [
   { id: 'uber', name: 'Uber' },
   { id: 'cabify', name: 'Cabify' },
   { id: 'didi', name: 'DiDi' },
+  { id: 'particular', name: 'Particular / Privado' },
+  { id: 'indrive', name: 'InDrive' },
   { id: 'rappi', name: 'Rappi' },
   { id: 'pedidosya', name: 'PedidosYa' },
-  { id: 'indrive', name: 'InDrive' },
 ];
 
 export default function RegisterPage() {

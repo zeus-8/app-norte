@@ -1,5 +1,5 @@
 import { db } from '@/db/index.js';
-import { dailyLogs, expenses, vehicleMaintenance, userSettings, users, households, householdMembers, expensePayments } from '@/db/schema.js';
+import { dailyLogs, expenses, vehicleMaintenance, userSettings, users, households, householdMembers, expensePayments, appAdvances, cashReconciliations } from '@/db/schema.js';
 import { eq, and, sql, ne, or, inArray } from 'drizzle-orm';
 
 function getMonthDiff(startStr, currentStr) {
@@ -82,17 +82,36 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
   let totalTrips = 0;
   const appBreakdownTotals = {};
 
+  // Obtener app preferida del usuario para imputar jornadas sin desglose
+  const userRow = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { activeApps: true }
+  });
+  const defaultAppKey = (userRow?.activeApps?.[0] || 'uber').toLowerCase();
+
   for (const log of logs) {
-    grossIncome += Number(log.grossIncome) || 0;
+    const logGross = Number(log.grossIncome) || 0;
+    grossIncome += logGross;
     fuelExpense += Number(log.fuelExpense) || 0;
     otherExpense += Number(log.otherExpense) || 0;
     totalMinutesWorked += (log.minutesWorked || 0);
     totalTrips += (log.tripsCount || 0);
 
+    let loggedAppTotal = 0;
     if (log.appBreakdown && typeof log.appBreakdown === 'object') {
       Object.entries(log.appBreakdown).forEach(([app, amount]) => {
-        appBreakdownTotals[app] = (appBreakdownTotals[app] || 0) + (Number(amount) || 0);
+        const aKey = (app || '').toLowerCase().trim();
+        const aAmt = Number(amount) || 0;
+        appBreakdownTotals[aKey] = (appBreakdownTotals[aKey] || 0) + aAmt;
+        loggedAppTotal += aAmt;
       });
+    }
+
+    // Si el log tiene facturación bruta pero quedó sin desglose específico,
+    // imputar el remanente a la app principal del chofer para que la suma cuadre al centavo
+    const unallocated = logGross - loggedAppTotal;
+    if (unallocated > 0) {
+      appBreakdownTotals[defaultAppKey] = (appBreakdownTotals[defaultAppKey] || 0) + unallocated;
     }
   }
 
@@ -138,7 +157,30 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     });
   }
 
-  // 4. Checklist de Pagos del mes
+  // 4. Adelantos de Apps en el mes (incluye asignación a gastos del mes)
+  const advances = await db.query.appAdvances.findMany({
+    where: and(
+      eq(appAdvances.userId, userId),
+      eq(appAdvances.month, targetMonth)
+    ),
+  });
+
+  let totalAdvances = 0;
+  const advancesByApp = {};
+  const advancesByExpense = {};
+
+  for (const adv of advances) {
+    const amt = Number(adv.amount) || 0;
+    totalAdvances += amt;
+    const aKey = (adv.app || 'general').toLowerCase();
+    advancesByApp[aKey] = (advancesByApp[aKey] || 0) + amt;
+
+    if (adv.expenseId) {
+      advancesByExpense[adv.expenseId] = (advancesByExpense[adv.expenseId] || 0) + amt;
+    }
+  }
+
+  // 5. Checklist de Pagos del mes
   const payments = await db
     .select()
     .from(expensePayments)
@@ -187,15 +229,30 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
       }
 
       const userShareAmount = Math.round(monthlyAmount * (userPct / 100));
-      const isPaid = Boolean(paymentsMap[exp.id]);
+      const isPaidDirectly = Boolean(paymentsMap[exp.id]);
+      const allocatedAdvance = Math.round(advancesByExpense[exp.id] || 0);
+
+      let effectivePaidAmount = 0;
+      let isPaid = false;
+
+      if (isPaidDirectly) {
+        isPaid = true;
+        effectivePaidAmount = userShareAmount;
+      } else if (allocatedAdvance > 0) {
+        if (allocatedAdvance >= userShareAmount) {
+          isPaid = true;
+          effectivePaidAmount = userShareAmount;
+        } else {
+          isPaid = false;
+          effectivePaidAmount = allocatedAdvance;
+        }
+      }
 
       if (exp.type === 'fixed') fixedExpensesUserShare += userShareAmount;
       else if (exp.type === 'installment') installmentsUserShare += userShareAmount;
       else oneTimeUserShare += userShareAmount;
 
-      if (isPaid) {
-        totalPaidObligations += userShareAmount;
-      }
+      totalPaidObligations += effectivePaidAmount;
 
       expensesBreakdown.push({
         id: exp.id,
@@ -205,6 +262,8 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
         totalAmount: monthlyAmount,
         userSharePct: userPct,
         userShareAmount,
+        allocatedAdvance,
+        remainingAmount: Math.max(0, userShareAmount - effectivePaidAmount),
         isShared: Boolean(exp.isShared || exp.householdId),
         isHousehold: Boolean(exp.householdId),
         isPaid,
@@ -216,6 +275,44 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
   const totalPendingObligations = Math.max(0, totalObligations - totalPaidObligations);
   const paidPct = totalObligations > 0 ? Math.min(100, Math.round((totalPaidObligations / totalObligations) * 100)) : 100;
   const freeBalance = netIncome - totalObligations;
+
+  const pendingAppBalances = {};
+  let totalPendingApps = 0;
+  Object.entries(appBreakdownTotals).forEach(([app, billed]) => {
+    const aLower = app.toLowerCase();
+    // Los viajes particulares / privados se cobran directamente (no son retenidos por plataformas intermediarias)
+    if (aLower !== 'particular' && aLower !== 'privado' && aLower !== 'remis') {
+      const adv = advancesByApp[aLower] || 0;
+      const pending = Math.max(0, billed - adv);
+      pendingAppBalances[app] = pending;
+      totalPendingApps += pending;
+    }
+  });
+
+  // 6. Arqueos y Reconciliaciones de Caja del mes
+  const reconciliations = await db.query.cashReconciliations.findMany({
+    where: and(
+      eq(cashReconciliations.userId, userId),
+      eq(cashReconciliations.month, targetMonth)
+    ),
+    orderBy: (cr, { desc }) => [desc(cr.date), desc(cr.createdAt)],
+  });
+
+  let totalSavingsTransfers = 0;
+  let totalDirectAdjustments = 0;
+  for (const rec of reconciliations) {
+    const adjAmt = Number(rec.adjustmentAmount) || 0;
+    if (rec.adjustmentType === 'savings_transfer') {
+      totalSavingsTransfers += adjAmt;
+    } else if (rec.adjustmentType === 'direct_adjustment') {
+      totalDirectAdjustments += adjAmt;
+    }
+  }
+
+  const theoreticalCashBalance = Math.round(netIncome - totalPaidObligations - totalSavingsTransfers + totalDirectAdjustments);
+  const latestReconciliation = reconciliations[0] || null;
+  const actualCashOnHand = latestReconciliation ? Math.round(Number(latestReconciliation.totalReal)) : theoreticalCashBalance;
+  const cashDifference = latestReconciliation ? Math.round(Number(latestReconciliation.difference)) : 0;
 
   return {
     month: targetMonth,
@@ -238,6 +335,19 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     paidPct,
     freeBalance,
     expensesBreakdown,
+    cashFlow: {
+      theoreticalCashBalance,
+      actualCashOnHand,
+      cashDifference,
+      latestReconciliation,
+      totalAdvances,
+      advancesByApp,
+      advancesByExpense,
+      pendingAppBalances,
+      totalPendingApps,
+      totalSavingsTransfers,
+      totalDirectAdjustments,
+    },
   };
 }
 

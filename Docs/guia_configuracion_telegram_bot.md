@@ -114,7 +114,10 @@ Una vez vinculado, puedes escribirle comandos a tu bot en cualquier momento:
 
 | Comando | Acción |
 | :--- | :--- |
-| `/resumen` o `/estado` | Te devuelve tu estado financiero del mes en curso y alertas de services. |
+| `/jornada` | Carga tu jornada diaria multiapp (horas, minutos, apps, combustible, odo). Si olvidaste cargar ayer, puedes escribir `/jornada ayer ...` o `fecha: 2026-09-23`. |
+| `/gasto` | Carga gastos personales o del hogar en una línea o multilínea (cuotas fijas, porcentajes compartidos, medios de pago). |
+| `/adelanto` o `/retiro` | Registra cobros anticipados de Uber, Cabify o DiDi (ej. `/adelanto uber 40000 mp`). |
+| `/resumen` o `/estado` | Te devuelve tu estado financiero del mes en curso, flujo de caja real y alertas preventivas de tu vehículo. |
 | `/chatid` | Te recuerda tu Chat ID. |
 | `/ayuda` | Muestra la lista de comandos disponibles. |
 

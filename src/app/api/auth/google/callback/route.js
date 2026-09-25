@@ -117,6 +117,9 @@ export async function GET(request) {
       email: finalUser.email,
       name: finalUser.name,
       role: finalUser.role,
+      moduleDriver: Boolean(finalUser.moduleDriver),
+      moduleExpenses: Boolean(finalUser.moduleExpenses),
+      moduleVehicle: Boolean(finalUser.moduleVehicle),
     });
 
     await setSessionCookie(token);

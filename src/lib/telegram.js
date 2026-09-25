@@ -139,6 +139,27 @@ export function formatMonthlyFinancialReport(user, summary, vehicleAlerts = [], 
     msg += `<i>Aún faltan cubrir obligaciones del mes.</i>\n\n`;
   }
 
+  // 4. Arqueo & Flujo de Caja Real (si hay datos)
+  if (summary?.cashFlow) {
+    const cf = summary.cashFlow;
+    msg += `💵 <b>Caja Líquida & Arqueo:</b>\n`;
+    msg += `• Saldo Teórico en Caja: ${formatMoney(cf.theoreticalCashBalance)}\n`;
+    if (cf.latestReconciliation) {
+      msg += `• Dinero Real Declarado: ${formatMoney(cf.actualCashOnHand)}\n`;
+      if (cf.cashDifference !== 0) {
+        const diffSign = cf.cashDifference > 0 ? '+' : '';
+        const diffIcon = cf.cashDifference > 0 ? '🟢 Sobrante' : '🔴 Faltante';
+        msg += `• ${diffIcon}: <b>${diffSign}${formatMoney(cf.cashDifference)}</b>\n`;
+      } else {
+        msg += `• 🎯 <i>Caja cuadrada al 100%</i>\n`;
+      }
+    }
+    if (cf.totalAdvances > 0) {
+      msg += `• 📲 Retiros/Adelantos de Apps: ${formatMoney(cf.totalAdvances)}\n`;
+    }
+    msg += `\n`;
+  }
+
   // 4. Alertas Vehiculares
   if (vehicleAlerts && vehicleAlerts.length > 0) {
     msg += `🔧 <b>Alertas de Mantenimiento & Trámites:</b>\n`;

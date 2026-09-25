@@ -3,19 +3,25 @@ dotenv.config({ path: '.env.local' });
 dotenv.config({ path: '.env' });
 import bcrypt from 'bcryptjs';
 import { db } from './index.js';
-import { users, vehicleMaintenance, expenses, dailyLogs, userSettings } from './schema.js';
+import { 
+  users, 
+  vehicleMaintenance, 
+  expenses, 
+  dailyLogs, 
+  userSettings, 
+  expensePayments, 
+  appAdvances, 
+  cashReconciliations 
+} from './schema.js';
 import { eq } from 'drizzle-orm';
 
 async function seed() {
-  console.log('🌱 Iniciando carga de datos iniciales (Seed)...');
+  console.log('🌱 Iniciando carga y actualización de datos iniciales (Seed)...');
 
-  // 1. Crear Usuario Administrador (Dueño de la plataforma)
+  // 1. Crear Usuario Administrador (Dueño de la plataforma SaaS)
   const adminPasswordHash = await bcrypt.hash('admin123', 10);
-  const existingAdmin = await db.query.users.findFirst({
-    where: eq(users.email, 'admin@autogastos.com'),
-  });
+  let [adminUser] = await db.select().from(users).where(eq(users.email, 'admin@autogastos.com')).limit(1);
 
-  let adminUser = existingAdmin;
   if (!adminUser) {
     const [created] = await db.insert(users).values({
       email: 'admin@autogastos.com',
@@ -32,15 +38,14 @@ async function seed() {
     }).returning();
     adminUser = created;
     console.log('✅ Usuario Administrador creado: admin@autogastos.com / admin123');
+  } else {
+    console.log('ℹ️ Usuario Administrador ya existente: admin@autogastos.com');
   }
 
-  // 2. Crear Usuario Chofer de Prueba (Juan - Dueño de Auto)
+  // 2. Crear Usuario Chofer de Prueba (Juan Chofer - Dueño de Auto)
   const userPasswordHash = await bcrypt.hash('juan123', 10);
-  const existingUser = await db.query.users.findFirst({
-    where: eq(users.email, 'juan@chofer.com'),
-  });
+  let [demoUser] = await db.select().from(users).where(eq(users.email, 'juan@chofer.com')).limit(1);
 
-  let demoUser = existingUser;
   if (!demoUser) {
     const [created] = await db.insert(users).values({
       email: 'juan@chofer.com',
@@ -59,6 +64,8 @@ async function seed() {
     }).returning();
     demoUser = created;
     console.log('✅ Usuario Chofer Demo creado: juan@chofer.com / juan123');
+  } else {
+    console.log('ℹ️ Usuario Chofer Demo ya existente: juan@chofer.com');
   }
 
   const userId = demoUser.id;
@@ -85,13 +92,16 @@ async function seed() {
     { name: 'Alineación y Balanceo', trackingType: 'km', intervalKm: 10000, intervalMonths: 6, lastServiceKm: 142000, lastServiceDate: '2026-06-15', estimatedCost: '35000', category: 'Neumáticos / Chasis', priority: 'normal', isDocument: false, notes: 'Rotación y balanceo' },
   ];
 
-  for (const item of defaultMaintenance) {
-    await db.insert(vehicleMaintenance).values({
-      userId,
-      ...item,
-    });
+  const existingMaint = await db.select().from(vehicleMaintenance).where(eq(vehicleMaintenance.userId, userId)).limit(1);
+  if (existingMaint.length === 0) {
+    for (const item of defaultMaintenance) {
+      await db.insert(vehicleMaintenance).values({
+        userId,
+        ...item,
+      });
+    }
+    console.log('✅ Catálogo de mantenimientos cargado');
   }
-  console.log('✅ Catálogo de mantenimientos cargado');
 
   // 5. Gastos fijos y compras en cuotas iniciales
   const defaultExpenses = [
@@ -102,24 +112,31 @@ async function seed() {
     { name: 'Seguro Auto', category: 'Auto', type: 'fixed', totalAmount: '95000', installmentCount: 1, installmentAmount: '95000', startMonth: '2026-01', isShared: false, userSharePct: '100', paymentMethod: 'Débito', notes: 'Seguro chofer' },
     { name: 'GPS Auto / Rastreo', category: 'Auto', type: 'fixed', totalAmount: '23200', installmentCount: 1, installmentAmount: '23200', startMonth: '2026-01', isShared: false, userSharePct: '100', paymentMethod: 'Débito', notes: 'Rastreo satelital' },
     { name: 'Celular Plan', category: 'Personal', type: 'fixed', totalAmount: '20000', installmentCount: 1, installmentAmount: '20000', startMonth: '2026-01', isShared: false, userSharePct: '100', paymentMethod: 'Débito', notes: 'Línea de trabajo' },
-    // Cuotas de tarjetas
     { name: 'Lavadora', category: 'Tarjeta MASTER', type: 'installment', totalAmount: '379525', installmentCount: 12, installmentAmount: '31627.08', startMonth: '2025-12', endMonth: '2026-11', isShared: false, userSharePct: '100', paymentMethod: 'MASTER', notes: '12 cuotas fijas' },
     { name: 'Televisor', category: 'Tarjeta MASTER', type: 'installment', totalAmount: '612000', installmentCount: 12, installmentAmount: '51000', startMonth: '2025-12', endMonth: '2026-11', isShared: false, userSharePct: '100', paymentMethod: 'MASTER', notes: '12 cuotas TV' },
     { name: 'Celular Cuotas', category: 'Tarjeta VISA', type: 'installment', totalAmount: '70000', installmentCount: 12, installmentAmount: '5833.33', startMonth: '2025-12', endMonth: '2026-11', isShared: false, userSharePct: '100', paymentMethod: 'VISA', notes: '12 cuotas' },
   ];
 
-  for (const exp of defaultExpenses) {
-    await db.insert(expenses).values({
-      userId,
-      ...exp,
-    });
+  const existingExp = await db.select().from(expenses).where(eq(expenses.userId, userId)).limit(1);
+  let loadedExpenses = [];
+  if (existingExp.length === 0) {
+    for (const exp of defaultExpenses) {
+      const [inserted] = await db.insert(expenses).values({
+        userId,
+        ...exp,
+      }).returning();
+      loadedExpenses.push(inserted);
+    }
+    console.log('✅ Gastos y compras en cuotas cargados');
+  } else {
+    loadedExpenses = await db.select().from(expenses).where(eq(expenses.userId, userId));
   }
-  console.log('✅ Gastos y compras en cuotas cargados');
 
   // 6. Jornadas Multiapp de ejemplo con horas y minutos exactos
   const today = new Date();
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, '0');
+  const currentMonth = `${year}-${month}`;
 
   const sampleLogs = [
     { date: `${year}-${month}-08`, grossIncome: '54000', appBreakdown: { uber: 32000, cabify: 22000 }, fuelExpense: '11000', otherExpense: '1500', odometerKm: 144200, minutesWorked: 480, tripsCount: 16, notes: 'Mañana movida en Uber y Cabify' },
@@ -132,11 +149,74 @@ async function seed() {
     await db.insert(dailyLogs).values({
       userId,
       ...log,
-    });
+    }).onConflictDoNothing();
   }
   console.log('✅ Jornadas multiapp de ejemplo cargadas');
 
-  console.log('✨ Seed completado con éxito!');
+  // 7. Checklist de pagos mensuales (Pagos cancelados de ejemplo)
+  if (loadedExpenses.length > 0) {
+    const alquilerExp = loadedExpenses.find(e => e.name === 'Alquiler');
+    const seguroExp = loadedExpenses.find(e => e.name === 'Seguro Auto');
+
+    if (alquilerExp) {
+      await db.insert(expensePayments).values({
+        expenseId: alquilerExp.id,
+        userId,
+        month: currentMonth,
+        isPaid: true,
+        paidAt: new Date(),
+        notes: 'Cancelado por transferencia',
+      }).onConflictDoNothing();
+    }
+
+    if (seguroExp) {
+      await db.insert(expensePayments).values({
+        expenseId: seguroExp.id,
+        userId,
+        month: currentMonth,
+        isPaid: true,
+        paidAt: new Date(),
+        notes: 'Débito automático procesado',
+      }).onConflictDoNothing();
+    }
+    console.log('✅ Checklist de pagos del mes registrado');
+  }
+
+  // 8. Adelanto / Retiro Inmediato de App (Uber $40.000 a Mercado Pago)
+  const existingAdv = await db.select().from(appAdvances).where(eq(appAdvances.userId, userId)).limit(1);
+  if (existingAdv.length === 0) {
+    await db.insert(appAdvances).values({
+      userId,
+      app: 'uber',
+      amount: '40000.00',
+      date: `${year}-${month}-10`,
+      month: currentMonth,
+      destination: 'Mercado Pago',
+      notes: 'Cobro anticipado Flash para emergencias',
+    });
+    console.log('✅ Adelanto de App de prueba cargado (Uber: $40.000)');
+  }
+
+  // 9. Arqueo y Conciliación de Caja de ejemplo
+  const existingRec = await db.select().from(cashReconciliations).where(eq(cashReconciliations.userId, userId)).limit(1);
+  if (existingRec.length === 0) {
+    await db.insert(cashReconciliations).values({
+      userId,
+      date: `${year}-${month}-11`,
+      month: currentMonth,
+      theoreticalBalance: '110000.00',
+      realCash: '60000.00',
+      realBank: '50000.00',
+      totalReal: '110000.00',
+      difference: '0.00',
+      adjustmentType: 'none',
+      adjustmentAmount: '0.00',
+      notes: 'Arqueo de fin de semana: caja cuadrada',
+    });
+    console.log('✅ Arqueo y conciliación de caja de prueba cargado');
+  }
+
+  console.log('✨ Seed integral completado con éxito!');
   process.exit(0);
 }
 

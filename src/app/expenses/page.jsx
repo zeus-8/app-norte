@@ -19,7 +19,8 @@ import {
   Clock,
   TrendingUp,
   Sparkles,
-  Home
+  Home,
+  Zap
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -50,7 +51,15 @@ export default function ExpensesPage() {
   useEffect(() => {
     fetch('/api/auth/me')
       .then(res => res.json())
-      .then(data => { if (data.authenticated) setUser(data.user); });
+      .then(data => { 
+        if (data.authenticated) {
+          if (data.user.role !== 'admin' && !data.user.moduleExpenses) {
+            window.location.href = '/dashboard?restricted=expenses';
+            return;
+          }
+          setUser(data.user);
+        }
+      });
   }, []);
 
   const refreshData = useCallback(async () => {
@@ -97,28 +106,7 @@ export default function ExpensesPage() {
   const handleTogglePayment = async (exp) => {
     try {
       setTogglingPaymentId(exp.id);
-      const newPaid = !exp.is_paid;
-      
-      // Optimistic update
-      setExpensesData(prev => {
-        if (!prev || !prev.expenses) return prev;
-        const updatedExpenses = prev.expenses.map(e => e.id === exp.id ? { ...e, is_paid: newPaid, paid_at: newPaid ? new Date().toISOString() : null } : e);
-        const totalPaidAmount = updatedExpenses.filter(e => e.is_paid).reduce((sum, e) => sum + (e.user_amount || 0), 0);
-        const totalUserMonthlyTarget = prev.summary?.totalUserMonthlyTarget || 0;
-        const totalPendingAmount = Math.max(0, totalUserMonthlyTarget - totalPaidAmount);
-        const paidPercentage = totalUserMonthlyTarget > 0 ? Math.round((totalPaidAmount / totalUserMonthlyTarget) * 100) : 100;
-
-        return {
-          ...prev,
-          expenses: updatedExpenses,
-          summary: {
-            ...prev.summary,
-            totalPaidAmount,
-            totalPendingAmount,
-            paidPercentage,
-          }
-        };
-      });
+      const newPaid = exp.is_paid_directly !== undefined ? !exp.is_paid_directly : !exp.is_paid;
 
       const res = await fetch('/api/expenses/payments', {
         method: 'POST',
@@ -130,7 +118,7 @@ export default function ExpensesPage() {
         }),
       });
 
-      if (!res.ok) {
+      if (res.ok) {
         await refreshData();
       }
     } catch (err) {
@@ -445,8 +433,8 @@ export default function ExpensesPage() {
                           width: '24px',
                           height: '24px',
                           borderRadius: '6px',
-                          border: exp.is_paid ? '2px solid #10b981' : '2px solid #64748b',
-                          background: exp.is_paid ? '#10b981' : 'transparent',
+                          border: exp.is_paid ? '2px solid #10b981' : (exp.allocated_advance > 0 ? '2px solid #38bdf8' : '2px solid #64748b'),
+                          background: exp.is_paid ? '#10b981' : (exp.allocated_advance > 0 ? 'rgba(56, 189, 248, 0.15)' : 'transparent'),
                           color: 'white',
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -454,14 +442,21 @@ export default function ExpensesPage() {
                           cursor: 'pointer',
                           transition: 'all 0.15s'
                         }}
-                        title={exp.is_paid ? 'Marcado como pagado. Clic para desmarcar' : 'Clic para marcar como pagado en este mes'}
+                        title={
+                          exp.is_paid_directly
+                            ? 'Marcado como pagado directamente. Clic para desmarcar'
+                            : exp.allocated_advance > 0
+                            ? `Adelanto aplicado: $${Math.round(exp.allocated_advance).toLocaleString()}. Clic para marcar 100% cancelado.`
+                            : 'Clic para marcar como pagado en este mes'
+                        }
                       >
                         {exp.is_paid && <CheckCircle2 size={16} />}
+                        {!exp.is_paid && exp.allocated_advance > 0 && <Zap size={13} style={{ color: '#38bdf8' }} />}
                       </button>
                     </td>
 
                     <td>
-                      <div style={{ fontWeight: 700, color: exp.is_paid ? '#cbd5e1' : 'white', fontSize: '0.95rem', textDecoration: exp.is_paid ? 'line-through' : 'none' }}>
+                      <div style={{ fontWeight: 700, color: exp.is_paid ? '#cbd5e1' : 'white', fontSize: '0.95rem', textDecoration: exp.is_paid && !exp.allocated_advance ? 'line-through' : 'none' }}>
                         {exp.name}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
@@ -470,9 +465,27 @@ export default function ExpensesPage() {
                             📅 Vence día {exp.dueDay}
                           </span>
                         )}
-                        {exp.is_paid && (
+                        {exp.is_paid_directly && (
                           <span style={{ fontSize: '0.68rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: 3 }}>
                             <CheckCircle2 size={11} /> Pagado
+                          </span>
+                        )}
+                        {exp.allocated_advance > 0 && (
+                          <span style={{ 
+                            fontSize: '0.68rem', 
+                            color: exp.remaining_amount === 0 ? '#34d399' : '#38bdf8', 
+                            background: exp.remaining_amount === 0 ? 'rgba(52, 211, 153, 0.12)' : 'rgba(56, 189, 248, 0.12)', 
+                            border: exp.remaining_amount === 0 ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)',
+                            padding: '1px 6px', 
+                            borderRadius: '4px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            fontWeight: 600
+                          }}>
+                            <Zap size={10} />
+                            Adelanto: ${Math.round(exp.allocated_advance).toLocaleString()}
+                            {exp.remaining_amount > 0 ? ` (Resta: $${Math.round(exp.remaining_amount).toLocaleString()})` : ' (Cubierto 100%)'}
                           </span>
                         )}
                       </div>
@@ -526,8 +539,24 @@ export default function ExpensesPage() {
                       )}
                     </td>
 
-                    <td className="font-mono text-emerald" style={{ fontWeight: 800, fontSize: '1rem' }}>
-                      ${Math.round(exp.user_amount).toLocaleString()}
+                    <td>
+                      <div className="font-mono text-emerald" style={{ fontWeight: 800, fontSize: '1rem' }}>
+                        ${Math.round(exp.user_amount).toLocaleString()}
+                      </div>
+                      {exp.allocated_advance > 0 && !exp.is_paid_directly && (
+                        <div style={{ fontSize: '0.72rem', marginTop: 2 }}>
+                          <span style={{ color: '#38bdf8' }}>-${Math.round(exp.allocated_advance).toLocaleString()} adelanto</span>
+                          {exp.remaining_amount > 0 ? (
+                            <div className="font-mono text-rose" style={{ fontWeight: 700, fontSize: '0.75rem' }}>
+                              Pendiente: ${Math.round(exp.remaining_amount).toLocaleString()}
+                            </div>
+                          ) : (
+                            <div className="font-mono text-emerald" style={{ fontWeight: 700, fontSize: '0.75rem' }}>
+                              ✓ Cubierto
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </td>
 
                     <td>

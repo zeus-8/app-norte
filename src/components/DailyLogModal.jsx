@@ -88,7 +88,9 @@ export default function DailyLogModal({
     }
 
     const odoNum = Number(odometerKm) || 0;
-    if (currentOdometer > 0 && odoNum > 0 && odoNum < currentOdometer && !initialData) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const isPastDate = date < todayStr;
+    if (!isPastDate && currentOdometer > 0 && odoNum > 0 && odoNum < currentOdometer && !initialData) {
       setError(`El odómetro (${odoNum.toLocaleString()} km) no puede ser inferior al último registrado (${currentOdometer.toLocaleString()} km)`);
       return;
     }
@@ -103,7 +105,8 @@ export default function DailyLogModal({
         fuelExpense: fuel,
         otherExpense: other,
         odometerKm: odoNum,
-        minutesWorked: totalMins,
+        hoursWorked: Number(hoursWorked) || 0,
+        minutesWorked: Number(minutesWorked) || 0,
         tripsCount: Number(tripsCount) || 0,
         notes,
       });

@@ -38,12 +38,15 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Tu cuenta se encuentra suspendida. Contacta al administrador' }, { status: 403 });
     }
 
-    // Crear token de sesión
+    // Crear token de sesión con roles y módulos habilitados
     const token = await createSessionToken({
       id: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
+      moduleDriver: Boolean(user.moduleDriver),
+      moduleExpenses: Boolean(user.moduleExpenses),
+      moduleVehicle: Boolean(user.moduleVehicle),
     });
 
     // Guardar cookie httpOnly
@@ -53,6 +56,8 @@ export async function POST(request) {
     return NextResponse.json({ success: true, user: userSafe });
   } catch (error) {
     console.error('Error en login:', error);
-    return NextResponse.json({ error: 'Error interno del servidor al iniciar sesión' }, { status: 500 });
+    return NextResponse.json({ 
+      error: `Error al iniciar sesión: ${error.message || 'Error de conexión con la base de datos'}` 
+    }, { status: 500 });
   }
 }

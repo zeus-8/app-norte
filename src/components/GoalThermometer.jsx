@@ -5,9 +5,7 @@ import { Target, TrendingUp, Sparkles, CheckCircle2, AlertTriangle, Flame } from
 import confetti from 'canvas-confetti';
 
 export default function GoalThermometer({ summaryData }) {
-  if (!summaryData) return null;
-
-  const { earnings = {}, obligations = {}, goals = {}, calendar = {} } = summaryData;
+  const { earnings = {}, obligations = {}, goals = {}, calendar = {} } = summaryData || {};
   const netIncome = earnings.netIncome || 0;
   const targetMin = goals.targetMinimum || 1;
   const targetExp = goals.targetExpected || 1;
@@ -30,6 +28,8 @@ export default function GoalThermometer({ summaryData }) {
       }
     }
   }, [level, netIncome]);
+
+  if (!summaryData) return null;
 
   const visualFillPct = Math.min(100, Math.max(0, progressPct));
 

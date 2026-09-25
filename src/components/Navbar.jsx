@@ -117,21 +117,21 @@ export default function Navbar({
 
         {/* Acciones Rápidas & Usuario */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {onOpenOdometerModal && (
+          {onOpenOdometerModal && (user?.moduleVehicle || user?.moduleDriver || user?.role === 'admin') && (
             <button className="btn btn-secondary btn-sm font-mono" onClick={onOpenOdometerModal} title="Actualizar kilometraje">
               <Gauge size={14} className="text-cyan" />
               <span>{currentOdometer ? `${currentOdometer.toLocaleString()} km` : 'Odómetro'}</span>
             </button>
           )}
 
-          {user?.moduleDriver && onOpenDailyModal && (
+          {(user?.moduleDriver || user?.role === 'admin') && onOpenDailyModal && (
             <button className="btn btn-primary btn-sm" onClick={onOpenDailyModal}>
               <Plus size={14} />
               <span>+ Jornada</span>
             </button>
           )}
 
-          {user?.moduleExpenses && onOpenExpenseModal && (
+          {(user?.moduleExpenses || user?.role === 'admin') && onOpenExpenseModal && (
             <button className="btn btn-secondary btn-sm" onClick={onOpenExpenseModal}>
               <Plus size={14} />
               <span>+ Gasto</span>
@@ -161,7 +161,7 @@ export default function Navbar({
           <span>Dashboard</span>
         </Link>
 
-        {user?.moduleDriver && (
+        {(user?.moduleDriver || user?.role === 'admin') && (
           <Link 
             href="/driver" 
             className={`btn btn-sm ${pathname === '/driver' ? 'btn-primary' : 'btn-secondary'}`}
@@ -171,7 +171,7 @@ export default function Navbar({
           </Link>
         )}
 
-        {user?.moduleExpenses && (
+        {(user?.moduleExpenses || user?.role === 'admin') && (
           <Link 
             href="/expenses" 
             className={`btn btn-sm ${pathname === '/expenses' ? 'btn-primary' : 'btn-secondary'}`}
@@ -181,7 +181,7 @@ export default function Navbar({
           </Link>
         )}
 
-        {user?.moduleVehicle && (
+        {(user?.moduleVehicle || user?.role === 'admin') && (
           <Link 
             href="/vehicle" 
             className={`btn btn-sm ${pathname === '/vehicle' ? 'btn-primary' : 'btn-secondary'}`}

@@ -52,16 +52,25 @@ export async function GET(request) {
     const progressPct = targetExpected > 0 ? Math.min(150, Math.round((netIncome / targetExpected) * 100)) : 0;
     const minProgressPct = targetMinimum > 0 ? Math.min(150, Math.round((netIncome / targetMinimum) * 100)) : 0;
 
-    const remainingToExpected = Math.max(0, targetExpected - netIncome);
+    // Si hubo ajuste directo de caja por faltante/pérdida, se recalibra el dinero real necesario para cumplir las metas
+    const directLoss = (summary.cashFlow?.latestReconciliation?.difference && 
+      Number(summary.cashFlow.latestReconciliation.difference) < 0 && 
+      summary.cashFlow.latestReconciliation.adjustmentType === 'direct_adjustment')
+      ? Math.abs(Number(summary.cashFlow.latestReconciliation.difference))
+      : 0;
+
+    const effectiveNetForGoals = Math.max(0, netIncome - directLoss);
+
+    const remainingToExpected = Math.max(0, targetExpected - effectiveNetForGoals);
     const dailyTargetNeeded = daysRemaining > 0 ? Math.round(remainingToExpected / daysRemaining) : 0;
 
-    const remainingToMinimum = Math.max(0, targetMinimum - netIncome);
+    const remainingToMinimum = Math.max(0, targetMinimum - effectiveNetForGoals);
     const dailyTargetMinNeeded = daysRemaining > 0 ? Math.round(remainingToMinimum / daysRemaining) : 0;
 
     let level = 'below_minimum';
-    if (netIncome >= targetExpected) {
+    if (effectiveNetForGoals >= targetExpected) {
       level = 'surpassed';
-    } else if (netIncome >= targetMinimum) {
+    } else if (effectiveNetForGoals >= targetMinimum) {
       level = 'minimum_reached';
     }
 
@@ -84,6 +93,7 @@ export async function GET(request) {
         avgNetPerDayWorked: daysWorked > 0 ? Math.round(netIncome / daysWorked) : 0,
         hourlyRate: totalMinutesWorked > 0 ? Math.round(netIncome / (totalMinutesWorked / 60)) : 0,
       },
+      appBreakdownTotals: summary.appBreakdownTotals,
       obligations: {
         userFixedObligations: fixedExpensesUserShare,
         userInstallmentObligations: installmentsUserShare,
@@ -104,9 +114,10 @@ export async function GET(request) {
         remainingToMinimum,
         dailyTargetMinNeeded,
         level,
-        surplusAmount: Math.max(0, netIncome - targetExpected),
+        surplusAmount: Math.max(0, effectiveNetForGoals - targetExpected),
       },
       expensesBreakdown,
+      cashFlow: summary.cashFlow,
     });
   } catch (error) {
     console.error('Error generating summary:', error);

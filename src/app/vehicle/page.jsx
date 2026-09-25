@@ -41,7 +41,15 @@ export default function VehiclePage() {
   useEffect(() => {
     fetch('/api/auth/me')
       .then(res => res.json())
-      .then(data => { if (data.authenticated) setUser(data.user); });
+      .then(data => { 
+        if (data.authenticated) {
+          if (data.user.role !== 'admin' && !data.user.moduleVehicle) {
+            window.location.href = '/dashboard?restricted=vehicle';
+            return;
+          }
+          setUser(data.user);
+        }
+      });
   }, []);
 
   const refreshData = useCallback(async () => {

@@ -70,12 +70,15 @@ export async function POST(request) {
       value: '145000',
     });
 
-    // Generar sesión JWT
+    // Generar sesión JWT con módulos
     const token = await createSessionToken({
       id: newUser.id,
       email: newUser.email,
       name: newUser.name,
       role: newUser.role,
+      moduleDriver: Boolean(newUser.moduleDriver),
+      moduleExpenses: Boolean(newUser.moduleExpenses),
+      moduleVehicle: Boolean(newUser.moduleVehicle),
     });
 
     await setSessionCookie(token);
@@ -84,6 +87,8 @@ export async function POST(request) {
     return NextResponse.json({ success: true, user: userSafe });
   } catch (error) {
     console.error('Error en register:', error);
-    return NextResponse.json({ error: 'Error interno del servidor al registrar usuario' }, { status: 500 });
+    return NextResponse.json({ 
+      error: `Error al registrar usuario: ${error.message || 'Error de conexión con la base de datos'}` 
+    }, { status: 500 });
   }
 }

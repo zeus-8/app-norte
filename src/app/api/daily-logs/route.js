@@ -4,6 +4,7 @@ import { dailyLogs, userSettings } from '@/db/schema.js';
 import { eq, and, sql } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth.js';
 import { dailyLogSchema } from '@/lib/validations.js';
+import { syncUserOdometer } from '@/lib/odometer.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -99,7 +100,7 @@ export async function POST(request) {
     }
 
     const { date, grossIncome, appBreakdown, fuelExpense, otherExpense, odometerKm, hoursWorked, minutesWorked, tripsCount, notes } = validation.data;
-    const totalMinutes = (hoursWorked * 60) + minutesWorked;
+    const totalMinutes = hoursWorked > 0 ? (hoursWorked * 60) + minutesWorked : minutesWorked;
 
     const existing = body.id 
       ? await db.query.dailyLogs.findFirst({ where: and(eq(dailyLogs.id, body.id), eq(dailyLogs.userId, user.id)) })
@@ -133,25 +134,17 @@ export async function POST(request) {
       });
     }
 
-    // Actualizar odómetro en settings si es mayor
-    if (odometerKm > 0) {
-      const currentOdoSetting = await db.query.userSettings.findFirst({
-        where: and(eq(userSettings.userId, user.id), eq(userSettings.key, 'current_odometer')),
-      });
-      const currentOdo = currentOdoSetting ? parseInt(currentOdoSetting.value, 10) : 0;
-      if (odometerKm > currentOdo) {
-        await db.insert(userSettings).values({
-          userId: user.id,
-          key: 'current_odometer',
-          value: String(odometerKm),
-        }).onConflictDoUpdate({
-          target: [userSettings.userId, userSettings.key],
-          set: { value: String(odometerKm), updatedAt: new Date() },
-        });
-      }
+    // Sincronizar odómetro actual del usuario con el máximo registrado
+    let currentOdo = 0;
+    if (odometerKm > 0 || body.id) {
+      currentOdo = await syncUserOdometer(user.id);
     }
 
-    return NextResponse.json({ success: true, message: 'Jornada guardada correctamente' });
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Jornada guardada correctamente',
+      current_odometer: currentOdo,
+    });
   } catch (error) {
     console.error('Error saving daily log:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

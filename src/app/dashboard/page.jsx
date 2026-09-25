@@ -9,6 +9,8 @@ import ExpenseModal from '@/components/ExpenseModal';
 import ServiceDoneModal from '@/components/ServiceDoneModal';
 import NewServiceModal from '@/components/NewServiceModal';
 import OdometerModal from '@/components/OdometerModal';
+import CashReconciliationModal from '@/components/CashReconciliationModal';
+import AppAdvanceModal from '@/components/AppAdvanceModal';
 import { 
   DollarSign, 
   Receipt, 
@@ -18,16 +20,21 @@ import {
   CreditCard, 
   ArrowRight, 
   CheckCircle2, 
+  AlertTriangle,
   Clock,
   Sparkles,
   Home,
   Users,
   Check,
-  X
+  X,
+  Scale,
+  Smartphone,
+  Wallet
 } from 'lucide-react';
 
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
+  const [restrictedNotice, setRestrictedNotice] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(() => {
     const today = new Date();
     const y = today.getFullYear();
@@ -49,6 +56,24 @@ export default function DashboardPage() {
   const [serviceDoneModalOpen, setServiceDoneModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
   const [odometerModalOpen, setOdometerModalOpen] = useState(false);
+  const [reconciliationModalOpen, setReconciliationModalOpen] = useState(false);
+  const [advanceModalOpen, setAdvanceModalOpen] = useState(false);
+
+  // Detectar redirección por módulo restringido
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const restricted = params.get('restricted');
+      if (restricted) {
+        const moduleNames = {
+          driver: 'Módulo Conductor & Jornadas',
+          expenses: 'Módulo de Gastos & Tarjetas',
+          vehicle: 'Módulo de Mantenimiento Vehicular',
+        };
+        setRestrictedNotice(moduleNames[restricted] || `Módulo (${restricted})`);
+      }
+    }
+  }, []);
 
   // Cargar usuario
   useEffect(() => {
@@ -186,6 +211,27 @@ export default function DashboardPage() {
         onOpenOdometerModal={() => setOdometerModalOpen(true)}
       />
 
+      {/* Banner de Módulo Restringido */}
+      {restrictedNotice && (
+        <div className="card" style={{ padding: '14px 18px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid var(--accent-red)', color: '#f87171', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertTriangle size={20} color="#f87171" />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Acceso restringido: {restrictedNotice}</div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Este módulo no está habilitado en tu plan o suscripción. Contacta al administrador para habilitarlo.</div>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setRestrictedNotice(null)}
+            className="btn btn-secondary btn-sm"
+            style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
       {/* Notificación de acción de invitación */}
       {invitationMessage && (
         <div className="card" style={{ padding: '12px 16px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--accent-emerald)', color: '#34d399', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -304,6 +350,66 @@ export default function DashboardPage() {
                 {vehicleData.summary.urgentCount} urgente
               </span>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Widget de Arqueo y Caja Líquida */}
+      <div className="card" style={{ marginBottom: 24, padding: '18px 22px', background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.7) 100%)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-md)', background: 'rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#60a5fa' }}>
+              <Scale size={24} />
+            </div>
+            <div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>Disponibilidad Líquida & Arqueo de Caja</span>
+                {summaryData?.cashFlow?.latestReconciliation ? (
+                  summaryData.cashFlow.cashDifference === 0 ? (
+                    <span className="badge badge-green" style={{ fontSize: '0.72rem' }}>Caja Cuadrada ✓</span>
+                  ) : summaryData.cashFlow.cashDifference < 0 ? (
+                    <span className="badge badge-red" style={{ fontSize: '0.72rem' }}>Faltante: -${Math.abs(summaryData.cashFlow.cashDifference).toLocaleString()}</span>
+                  ) : (
+                    <span className="badge badge-yellow" style={{ fontSize: '0.72rem' }}>Sobrante: +${summaryData.cashFlow.cashDifference.toLocaleString()}</span>
+                  )
+                ) : (
+                  <span className="badge badge-blue" style={{ fontSize: '0.72rem' }}>Sin Arqueo Reciente</span>
+                )}
+              </div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                Saldo teórico calculado: <strong style={{ color: '#60a5fa' }}>${(summaryData?.cashFlow?.theoreticalCashBalance || 0).toLocaleString()}</strong>
+                {summaryData?.cashFlow?.latestReconciliation && (
+                  <span> • Dinero real en mano: <strong style={{ color: 'var(--text-main)' }}>${(summaryData.cashFlow.actualCashOnHand || 0).toLocaleString()}</strong></span>
+                )}
+                {summaryData?.cashFlow?.totalAdvances > 0 && (
+                  <span> • Retiros de apps: <strong style={{ color: '#fbbf24' }}>${(summaryData.cashFlow.totalAdvances || 0).toLocaleString()}</strong></span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {user?.moduleDriver && (
+              <button
+                type="button"
+                onClick={() => setAdvanceModalOpen(true)}
+                className="btn btn-secondary btn-sm"
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <Smartphone size={15} className="text-cyan" />
+                <span>+ Adelanto App</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setReconciliationModalOpen(true)}
+              className="btn btn-primary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Scale size={15} />
+              <span>Arqueo de Caja</span>
+            </button>
           </div>
         </div>
       </div>
@@ -445,6 +551,23 @@ export default function DashboardPage() {
         onClose={() => setOdometerModalOpen(false)}
         onSave={handleUpdateOdometer}
         currentOdometer={vehicleData?.current_odometer}
+      />
+
+      <CashReconciliationModal
+        isOpen={reconciliationModalOpen}
+        onClose={() => setReconciliationModalOpen(false)}
+        onSaved={refreshData}
+        currentMonth={currentMonth}
+      />
+
+      <AppAdvanceModal
+        isOpen={advanceModalOpen}
+        onClose={() => setAdvanceModalOpen(false)}
+        onSaved={refreshData}
+        currentMonth={currentMonth}
+        activeApps={user?.activeApps || ['uber', 'cabify', 'didi']}
+        appBreakdownTotals={summaryData?.appBreakdownTotals || {}}
+        advancesByApp={summaryData?.cashFlow?.advancesByApp || {}}
       />
     </div>
   );

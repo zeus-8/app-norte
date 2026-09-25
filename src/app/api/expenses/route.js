@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db/index.js';
-import { expenses, households, householdMembers, expensePayments } from '@/db/schema.js';
+import { expenses, households, householdMembers, expensePayments, appAdvances } from '@/db/schema.js';
 import { eq, and, ne, or, inArray, sql } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth.js';
 import { expenseSchema } from '@/lib/validations.js';
@@ -79,7 +79,7 @@ export async function GET(request) {
       });
     }
 
-    // 3. Obtener checklist de pagos del usuario para este mes
+    // 3. Obtener checklist de pagos y adelantos asignados para este mes
     const payments = await db
       .select()
       .from(expensePayments)
@@ -89,6 +89,23 @@ export async function GET(request) {
           eq(expensePayments.month, targetMonth)
         )
       );
+
+    const advances = await db
+      .select()
+      .from(appAdvances)
+      .where(
+        and(
+          eq(appAdvances.userId, user.id),
+          eq(appAdvances.month, targetMonth)
+        )
+      );
+
+    const advancesByExpense = {};
+    advances.forEach(adv => {
+      if (adv.expenseId) {
+        advancesByExpense[adv.expenseId] = (advancesByExpense[adv.expenseId] || 0) + (Number(adv.amount) || 0);
+      }
+    });
 
     const paymentsMap = {};
     payments.forEach(p => {
@@ -140,8 +157,25 @@ export async function GET(request) {
 
         const userAmount = Math.round(monthlyAmount * (userPct / 100));
         const otherAmount = monthlyAmount - userAmount;
-        const isPaid = Boolean(paymentsMap[exp.id]?.isPaid);
+        const isPaidDirectly = Boolean(paymentsMap[exp.id]?.isPaid);
         const paidAt = paymentsMap[exp.id]?.paidAt || null;
+        const allocatedAdvance = Math.round(advancesByExpense[exp.id] || 0);
+
+        let effectivePaidAmount = 0;
+        let isPaid = false;
+
+        if (isPaidDirectly) {
+          isPaid = true;
+          effectivePaidAmount = userAmount;
+        } else if (allocatedAdvance > 0) {
+          if (allocatedAdvance >= userAmount) {
+            isPaid = true;
+            effectivePaidAmount = userAmount;
+          } else {
+            isPaid = false;
+            effectivePaidAmount = allocatedAdvance;
+          }
+        }
 
         if (exp.isShared || exp.householdId) {
           totalHouseholdAll += monthlyAmount;
@@ -155,9 +189,7 @@ export async function GET(request) {
           totalUserOneTime += userAmount;
         }
 
-        if (isPaid) {
-          totalPaidAmount += userAmount;
-        }
+        totalPaidAmount += effectivePaidAmount;
 
         activeInMonth.push({
           ...exp,
@@ -168,6 +200,10 @@ export async function GET(request) {
           is_household: Boolean(exp.householdId),
           household_name: householdName,
           is_paid: isPaid,
+          is_paid_directly: isPaidDirectly,
+          allocated_advance: allocatedAdvance,
+          effective_paid_amount: effectivePaidAmount,
+          remaining_amount: Math.max(0, userAmount - effectivePaidAmount),
           paid_at: paidAt,
           current_installment_num: currentInstallmentNum,
           total_installments: totalInstallments,

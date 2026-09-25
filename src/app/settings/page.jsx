@@ -29,6 +29,7 @@ const AVAILABLE_APPS = [
   { id: 'uber', name: 'Uber', color: '#000000', badgeClass: 'badge-blue' },
   { id: 'cabify', name: 'Cabify', color: '#7145d6', badgeClass: 'badge-purple' },
   { id: 'didi', name: 'DiDi', color: '#ff7d00', badgeClass: 'badge-yellow' },
+  { id: 'particular', name: 'Particular / Privado', color: '#10b981', badgeClass: 'badge-green' },
   { id: 'indrive', name: 'InDrive', color: '#88cf00', badgeClass: 'badge-green' },
   { id: 'rappi', name: 'Rappi', color: '#ff441f', badgeClass: 'badge-red' },
   { id: 'pedidosya', name: 'PedidosYa', color: '#ea044e', badgeClass: 'badge-red' },
