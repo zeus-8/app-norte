@@ -55,9 +55,14 @@ export async function POST(request) {
     const { passwordHash, ...userSafe } = user;
     return NextResponse.json({ success: true, user: userSafe });
   } catch (error) {
-    console.error('Error en login:', error);
+    console.error('Error en login:', {
+      message: error?.message || String(error),
+      code: error?.code,
+      detail: error?.detail,
+      stack: error?.stack,
+    });
     return NextResponse.json({ 
-      error: `Error al iniciar sesión: ${error.message || 'Error de conexión con la base de datos'}` 
+      error: `Error al iniciar sesión: ${error?.message || 'Error de conexión con la base de datos'}` 
     }, { status: 500 });
   }
 }
