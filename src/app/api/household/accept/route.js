@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db/index.js';
-import { householdMembers } from '@/db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { householdMembers, expenses, foodExpenses } from '@/db/schema.js';
+import { eq, and, sql } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth.js';
 
 export const dynamic = 'force-dynamic';
@@ -31,6 +31,27 @@ export async function POST(request) {
           and(
             eq(householdMembers.householdId, householdId),
             eq(householdMembers.userId, sessionUser.id)
+          )
+        );
+
+      // Reconciliación retroactiva: vincular gastos compartidos huérfanos de ambos integrantes al hogar
+      await db
+        .update(expenses)
+        .set({ householdId })
+        .where(
+          and(
+            eq(expenses.isShared, true),
+            sql`${expenses.householdId} IS NULL`
+          )
+        );
+
+      await db
+        .update(foodExpenses)
+        .set({ householdId })
+        .where(
+          and(
+            eq(foodExpenses.isShared, true),
+            sql`${foodExpenses.householdId} IS NULL`
           )
         );
 

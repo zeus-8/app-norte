@@ -61,6 +61,10 @@ export async function GET(request) {
 
     const effectiveNetForGoals = Math.max(0, netIncome - directLoss);
 
+    // 📌 Objetivo Diario Base (Fijo Lineal de Planificación):
+    // Total obligaciones del mes dividido la cantidad total de días del mes/ciclo
+    const dailyBaseTarget = daysInMonth > 0 ? Math.round(totalObligations / daysInMonth) : 0;
+
     const remainingToExpected = Math.max(0, targetExpected - effectiveNetForGoals);
     const dailyTargetNeeded = daysRemaining > 0 ? Math.round(remainingToExpected / daysRemaining) : 0;
 
@@ -105,17 +109,19 @@ export async function GET(request) {
         autoMonthlyReserveTarget,
       },
       goals: {
+        dailyBaseTarget, // 📌 Meta Fija de Referencia Mental ($Total / Días del Mes)
         targetMinimum,
         targetExpected,
         progressPct,
         minProgressPct,
         remainingToExpected,
-        dailyTargetNeeded,
+        dailyTargetNeeded, // ⚡ Ritmo Dinámico de Compensación por Días Restantes
         remainingToMinimum,
         dailyTargetMinNeeded,
         level,
         surplusAmount: Math.max(0, effectiveNetForGoals - targetExpected),
       },
+      foodSummary: summary.foodSummary,
       expensesBreakdown,
       cashFlow: summary.cashFlow,
     });

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db/index.js';
-import { households, householdMembers, users } from '@/db/schema.js';
-import { eq, and, or } from 'drizzle-orm';
+import { households, householdMembers, users, expenses, foodExpenses } from '@/db/schema.js';
+import { eq, and, or, sql } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth.js';
 
 export const dynamic = 'force-dynamic';
@@ -127,6 +127,29 @@ export async function POST(request) {
       defaultSharePct: String(Number(partnerSharePct) || 40),
       status: 'pending',
     });
+
+    // 4. Reconciliación retroactiva: vincular gastos compartidos previos del creador al nuevo hogar
+    await db
+      .update(expenses)
+      .set({ householdId: newHousehold.id })
+      .where(
+        and(
+          eq(expenses.userId, sessionUser.id),
+          eq(expenses.isShared, true),
+          sql`${expenses.householdId} IS NULL`
+        )
+      );
+
+    await db
+      .update(foodExpenses)
+      .set({ householdId: newHousehold.id })
+      .where(
+        and(
+          eq(foodExpenses.userId, sessionUser.id),
+          eq(foodExpenses.isShared, true),
+          sql`${foodExpenses.householdId} IS NULL`
+        )
+      );
 
     return NextResponse.json({
       success: true,

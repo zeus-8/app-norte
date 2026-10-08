@@ -76,3 +76,28 @@ export const serviceDoneSchema = z.object({
   costPaid: z.coerce.number().min(0, 'El costo pagado debe ser mayor o igual a 0'),
   workshopNotes: z.string().optional().default(''),
 });
+
+// 7. Validación de Gasto de Comida / Supermercado
+export const foodExpenseSchema = z.object({
+  storeName: z.string().min(2, 'El nombre del comercio o supermercado debe tener al menos 2 caracteres'),
+  amount: z.coerce.number().gt(0, 'El monto del ticket debe ser mayor a $0'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe ser AAAA-MM-DD (ej. 2026-03-15)'),
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'El mes debe ser AAAA-MM (ej. 2026-03)').optional(),
+  paymentMethod: z.string().min(1, 'Selecciona un medio de pago').default('Efectivo'),
+  householdId: z.string().uuid().nullable().optional(),
+  isShared: z.boolean().default(true),
+  userSharePct: z.coerce.number().min(1, 'El porcentaje debe ser entre 1% y 100%').max(100, 'El porcentaje máximo permitido es 100%').default(60),
+  notes: z.string().optional().default(''),
+});
+
+// 8. Validación de Presupuesto Mensual de Comida
+export const foodBudgetSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'El mes debe ser AAAA-MM (ej. 2026-03)'),
+  budgetType: z.enum(['budget_only', 'tickets_only', 'hybrid'], {
+    errorMap: () => ({ message: 'Tipo de presupuesto inválido (Solo presupuesto, Solo tickets o Híbrido)' })
+  }).default('hybrid'),
+  monthlyBudget: z.coerce.number().min(0, 'El presupuesto mensual no puede ser negativo').default(0),
+  isShared: z.boolean().default(true),
+  userSharePct: z.coerce.number().min(1, 'El porcentaje debe ser entre 1% y 100%').max(100, 'El porcentaje máximo permitido es 100%').default(60),
+});
+

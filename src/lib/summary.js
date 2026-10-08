@@ -1,5 +1,5 @@
 import { db } from '@/db/index.js';
-import { dailyLogs, expenses, vehicleMaintenance, userSettings, users, households, householdMembers, expensePayments, appAdvances, cashReconciliations } from '@/db/schema.js';
+import { dailyLogs, expenses, vehicleMaintenance, userSettings, users, households, householdMembers, expensePayments, appAdvances, cashReconciliations, foodExpenses, foodBudgetSettings } from '@/db/schema.js';
 import { eq, and, sql, ne, or, inArray } from 'drizzle-orm';
 
 function getMonthDiff(startStr, currentStr) {
@@ -314,6 +314,50 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
   const actualCashOnHand = latestReconciliation ? Math.round(Number(latestReconciliation.totalReal)) : theoreticalCashBalance;
   const cashDifference = latestReconciliation ? Math.round(Number(latestReconciliation.difference)) : 0;
 
+  // 7. Módulo de Comida / Supermercado (incluye tickets personales y del hogar compartido)
+  const foodBudgetRow = await db.query.foodBudgetSettings.findFirst({
+    where: and(
+      eq(foodBudgetSettings.userId, userId),
+      eq(foodBudgetSettings.month, targetMonth)
+    ),
+  });
+
+  const foodTickets = await db.query.foodExpenses.findMany({
+    where: and(
+      eq(foodExpenses.month, targetMonth),
+      householdIds.length > 0
+        ? or(
+            eq(foodExpenses.userId, userId),
+            inArray(foodExpenses.householdId, householdIds)
+          )
+        : eq(foodExpenses.userId, userId)
+    ),
+  });
+
+  let totalFoodRaw = 0;
+  let totalFoodUserShare = 0;
+  for (const t of foodTickets) {
+    const amt = Number(t.amount) || 0;
+    totalFoodRaw += amt;
+    let pct = 100;
+    if (t.isShared) {
+      if (t.householdId && householdMap[t.householdId] !== undefined) {
+        pct = householdMap[t.householdId];
+      } else {
+        pct = t.userId === userId ? (Number(t.userSharePct) || 60) : (100 - (Number(t.userSharePct) || 60));
+      }
+    }
+    totalFoodUserShare += Math.round(amt * (pct / 100));
+  }
+
+  const foodMonthlyBudget = foodBudgetRow ? Number(foodBudgetRow.monthlyBudget) : 0;
+  const foodUserSharePct = foodBudgetRow ? Number(foodBudgetRow.userSharePct) : 60;
+  const foodUserBudget = Math.round(foodMonthlyBudget * (foodUserSharePct / 100));
+  const foodBudgetType = foodBudgetRow ? foodBudgetRow.budgetType : 'hybrid';
+  const foodRemainingBudget = Math.max(0, foodMonthlyBudget - totalFoodRaw);
+  const foodSurplusSpent = Math.max(0, totalFoodRaw - foodMonthlyBudget);
+  const foodPctSpent = foodMonthlyBudget > 0 ? Math.round((totalFoodRaw / foodMonthlyBudget) * 100) : 0;
+
   return {
     month: targetMonth,
     daysInMonth,
@@ -335,6 +379,18 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     paidPct,
     freeBalance,
     expensesBreakdown,
+    foodSummary: {
+      budgetType: foodBudgetType,
+      monthlyBudget: foodMonthlyBudget,
+      userMonthlyBudget: foodUserBudget,
+      totalFoodRaw,
+      totalFoodUserShare,
+      remainingBudget: foodRemainingBudget,
+      surplusSpent: foodSurplusSpent,
+      pctSpent: foodPctSpent,
+      ticketsCount: foodTickets.length,
+      isExceeded: foodMonthlyBudget > 0 && totalFoodRaw > foodMonthlyBudget,
+    },
     cashFlow: {
       theoreticalCashBalance,
       actualCashOnHand,

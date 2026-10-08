@@ -18,7 +18,8 @@ import {
   TrendingUp,
   Smartphone,
   Scale,
-  Wallet
+  Wallet,
+  Target
 } from 'lucide-react';
 
 export default function DriverPage() {
@@ -198,6 +199,21 @@ export default function DriverPage() {
             <span>Total viajes realizados: {summary.totalTrips || 0}</span>
           </div>
         </div>
+
+        {/* KPI Dual de Objetivo Diario (Fijo de Planificación + Dinámico de Compensación) */}
+        <div className="kpi-card emerald" style={{ border: '1px solid rgba(16, 185, 129, 0.35)', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 182, 212, 0.05) 100%)' }}>
+          <div className="kpi-header">
+            <span className="kpi-label" style={{ color: '#34d399' }}>Objetivo Diario Base</span>
+            <div style={{ color: '#34d399' }}><Target size={20} /></div>
+          </div>
+          <div className="kpi-value font-mono text-emerald">
+            ${(summaryData?.goals?.dailyBaseTarget || 0).toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>/ día</span>
+          </div>
+          <div className="kpi-subtext" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+            <span>Meta fija mensual</span>
+            <span className="text-amber">Ritmo: <strong>${(summaryData?.goals?.dailyTargetNeeded || 0).toLocaleString()}/d</strong></span>
+          </div>
+        </div>
       </div>
 
       {/* Sección de Liquidaciones & Adelantos de Apps */}
@@ -374,7 +390,20 @@ export default function DriverPage() {
                         {Number(log.otherExpense) > 0 ? `-$${Number(log.otherExpense).toLocaleString()}` : '$0'}
                       </td>
                       <td className="font-mono text-emerald" style={{ fontWeight: 800, fontSize: '1rem' }}>
-                        ${log.net_profit?.toLocaleString()}
+                        <div>${log.net_profit?.toLocaleString()}</div>
+                        {summaryData?.goals?.dailyBaseTarget > 0 && (
+                          <div style={{ marginTop: 3 }}>
+                            {log.net_profit >= summaryData.goals.dailyBaseTarget ? (
+                              <span className="badge badge-green font-mono" style={{ fontSize: '0.62rem', padding: '1px 5px' }} title="Superó el objetivo diario base">
+                                🟢 +${Math.round(log.net_profit - summaryData.goals.dailyBaseTarget).toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="badge badge-red font-mono" style={{ fontSize: '0.62rem', padding: '1px 5px' }} title="Por debajo del objetivo diario base">
+                                🔴 -${Math.round(summaryData.goals.dailyBaseTarget - log.net_profit).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td>
                         <div style={{ fontWeight: 600, color: 'white' }}>{hoursStr}</div>

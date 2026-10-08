@@ -29,7 +29,8 @@ import {
   X,
   Scale,
   Smartphone,
-  Wallet
+  Wallet,
+  Target
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -350,6 +351,21 @@ export default function DashboardPage() {
                 {vehicleData.summary.urgentCount} urgente
               </span>
             )}
+          </div>
+        </div>
+
+        {/* KPI Dual de Objetivo Diario (Fijo de Planificación) */}
+        <div className="kpi-card emerald" style={{ border: '1px solid rgba(16, 185, 129, 0.35)', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 182, 212, 0.05) 100%)' }}>
+          <div className="kpi-header">
+            <span className="kpi-label" style={{ color: '#34d399' }}>Objetivo Diario Base</span>
+            <div style={{ color: '#34d399' }}><Target size={20} /></div>
+          </div>
+          <div className="kpi-value font-mono text-emerald">
+            ${(summaryData?.goals?.dailyBaseTarget || 0).toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>/ día</span>
+          </div>
+          <div className="kpi-subtext" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+            <span>Planificado del mes</span>
+            <span className="text-amber">Ritmo: <strong>${(summaryData?.goals?.dailyTargetNeeded || 0).toLocaleString()}/d</strong></span>
           </div>
         </div>
       </div>

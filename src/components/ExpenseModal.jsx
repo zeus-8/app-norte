@@ -50,6 +50,7 @@ export default function ExpenseModal({
         .then(data => {
           if (data.household) {
             setHousehold(data.household);
+            setHouseholdId(prev => prev || data.household.id);
           } else {
             setHousehold(null);
           }
@@ -123,7 +124,7 @@ export default function ExpenseModal({
         installmentAmount: Number(monthlyInstAmount.toFixed(2)),
         startMonth,
         dueDay: Number(dueDay) || 5,
-        householdId: (isShared && householdId) ? householdId : null,
+        householdId: isShared ? (householdId || household?.id || null) : null,
         isShared,
         userSharePct: userPct,
         paymentMethod,

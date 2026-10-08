@@ -30,21 +30,39 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const targetMonth = searchParams.get('month') || new Date().toISOString().slice(0, 7);
 
-    // 1. Obtener membresías de Hogar aceptadas
-    const memberships = await db
-      .select({
-        householdId: householdMembers.householdId,
-        defaultSharePct: householdMembers.defaultSharePct,
-        householdName: households.name,
-      })
-      .from(householdMembers)
-      .leftJoin(households, eq(householdMembers.householdId, households.id))
-      .where(
-        and(
-          eq(householdMembers.userId, user.id),
-          eq(householdMembers.status, 'accepted')
-        )
-      );
+    // 1. Obtener membresías de Hogar aceptadas y pendientes
+    const [memberships, pendingInvitations] = await Promise.all([
+      db
+        .select({
+          householdId: householdMembers.householdId,
+          defaultSharePct: householdMembers.defaultSharePct,
+          householdName: households.name,
+        })
+        .from(householdMembers)
+        .leftJoin(households, eq(householdMembers.householdId, households.id))
+        .where(
+          and(
+            eq(householdMembers.userId, user.id),
+            eq(householdMembers.status, 'accepted')
+          )
+        ),
+      db
+        .select({
+          membershipId: householdMembers.id,
+          householdId: householdMembers.householdId,
+          defaultSharePct: householdMembers.defaultSharePct,
+          householdName: households.name,
+          createdBy: households.createdBy,
+        })
+        .from(householdMembers)
+        .leftJoin(households, eq(householdMembers.householdId, households.id))
+        .where(
+          and(
+            eq(householdMembers.userId, user.id),
+            eq(householdMembers.status, 'pending')
+          )
+        ),
+    ]);
 
     const householdMap = {};
     const householdIds = [];
@@ -56,7 +74,7 @@ export async function GET(request) {
       householdIds.push(m.householdId);
     });
 
-    // 2. Obtener gastos personales y compartidos
+    // 2. Obtener gastos personales y compartidos (incluyendo relación de usuario creador)
     let allExpenses = [];
     if (householdIds.length > 0) {
       allExpenses = await db.query.expenses.findMany({
@@ -67,6 +85,15 @@ export async function GET(request) {
             inArray(expenses.householdId, householdIds)
           )
         ),
+        with: {
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
         orderBy: (expenses, { desc }) => [desc(expenses.createdAt)],
       });
     } else {
@@ -75,6 +102,15 @@ export async function GET(request) {
           eq(expenses.userId, user.id),
           ne(expenses.status, 'cancelled')
         ),
+        with: {
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
         orderBy: (expenses, { desc }) => [desc(expenses.createdAt)],
       });
     }
@@ -199,6 +235,8 @@ export async function GET(request) {
           user_share_pct: userPct,
           is_household: Boolean(exp.householdId),
           household_name: householdName,
+          created_by_name: exp.user?.name || null,
+          is_created_by_me: exp.userId === user.id,
           is_paid: isPaid,
           is_paid_directly: isPaidDirectly,
           allocated_advance: allocatedAdvance,
@@ -219,6 +257,8 @@ export async function GET(request) {
     return NextResponse.json({
       month: targetMonth,
       expenses: activeInMonth,
+      pendingInvitations,
+      currentUserId: user.id,
       summary: {
         totalUserFixed,
         totalUserInstallments,
@@ -260,9 +300,28 @@ export async function POST(request) {
       endMonth = startMonth;
     }
 
+    // Auto-asignación de householdId: si es compartido y no vino householdId, buscar el hogar activo
+    let effectiveHouseholdId = householdId || null;
+    let effectiveUserSharePct = userSharePct;
+
+    if (isShared && !effectiveHouseholdId) {
+      const activeMembership = await db.query.householdMembers.findFirst({
+        where: and(
+          eq(householdMembers.userId, user.id),
+          eq(householdMembers.status, 'accepted')
+        ),
+      });
+      if (activeMembership) {
+        effectiveHouseholdId = activeMembership.householdId;
+        if (!effectiveUserSharePct || effectiveUserSharePct === 100) {
+          effectiveUserSharePct = Number(activeMembership.defaultSharePct) || 60;
+        }
+      }
+    }
+
     const [newExp] = await db.insert(expenses).values({
       userId: user.id,
-      householdId: householdId || null,
+      householdId: effectiveHouseholdId,
       name,
       category,
       type,
@@ -272,8 +331,8 @@ export async function POST(request) {
       startMonth,
       endMonth,
       dueDay: Number(dueDay) || 5,
-      isShared: Boolean(isShared || householdId),
-      userSharePct: String(userSharePct),
+      isShared: Boolean(isShared || effectiveHouseholdId),
+      userSharePct: String(effectiveUserSharePct),
       paymentMethod,
       status: 'active',
       notes,

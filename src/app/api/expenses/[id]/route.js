@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db/index.js';
-import { expenses } from '@/db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { expenses, householdMembers } from '@/db/schema.js';
+import { eq, and, or, inArray } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth.js';
 import { expenseSchema } from '@/lib/validations.js';
 
@@ -37,8 +37,28 @@ export async function PUT(request, { params }) {
       endMonth = startMonth;
     }
 
-    await db.update(expenses).set({
-      householdId: householdId || null,
+    // Obtener membresías aceptadas del usuario
+    const memberships = await db.query.householdMembers.findMany({
+      where: and(
+        eq(householdMembers.userId, user.id),
+        eq(householdMembers.status, 'accepted')
+      ),
+    });
+    const householdIds = memberships.map(m => m.householdId);
+
+    // Auto-asignar householdId si es compartido y no vino
+    let effectiveHouseholdId = householdId || null;
+    if (isShared && !effectiveHouseholdId && householdIds.length > 0) {
+      effectiveHouseholdId = householdIds[0];
+    }
+
+    // Permitir editar si es el creador o si pertenece al mismo hogar
+    const canEditCondition = householdIds.length > 0
+      ? or(eq(expenses.userId, user.id), inArray(expenses.householdId, householdIds))
+      : eq(expenses.userId, user.id);
+
+    const [updated] = await db.update(expenses).set({
+      householdId: effectiveHouseholdId,
       name,
       category,
       type,
@@ -48,12 +68,16 @@ export async function PUT(request, { params }) {
       startMonth,
       endMonth,
       dueDay: Number(dueDay) || 5,
-      isShared: Boolean(isShared || householdId),
+      isShared: Boolean(isShared || effectiveHouseholdId),
       userSharePct: String(userSharePct),
       paymentMethod,
       notes,
       updatedAt: new Date(),
-    }).where(and(eq(expenses.id, id), eq(expenses.userId, user.id)));
+    }).where(and(eq(expenses.id, id), canEditCondition)).returning();
+
+    if (!updated) {
+      return NextResponse.json({ error: 'Gasto no encontrado o sin permisos' }, { status: 404 });
+    }
 
     return NextResponse.json({ success: true, message: 'Gasto actualizado correctamente' });
   } catch (error) {
@@ -67,7 +91,20 @@ export async function DELETE(request, { params }) {
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
     const { id } = await params;
-    await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.userId, user.id)));
+
+    const memberships = await db.query.householdMembers.findMany({
+      where: and(
+        eq(householdMembers.userId, user.id),
+        eq(householdMembers.status, 'accepted')
+      ),
+    });
+    const householdIds = memberships.map(m => m.householdId);
+
+    const canDeleteCondition = householdIds.length > 0
+      ? or(eq(expenses.userId, user.id), inArray(expenses.householdId, householdIds))
+      : eq(expenses.userId, user.id);
+
+    await db.delete(expenses).where(and(eq(expenses.id, id), canDeleteCondition));
 
     return NextResponse.json({ success: true });
   } catch (error) {

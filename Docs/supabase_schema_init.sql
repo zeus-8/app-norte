@@ -11,6 +11,8 @@
 -- ==============================================================================
 
 -- 0. ELIMINACIÓN LIMPIA (DROP EN CASCADA PARA REHACER DE CERO)
+DROP TABLE IF EXISTS "food_budget_settings" CASCADE;
+DROP TABLE IF EXISTS "food_expenses" CASCADE;
 DROP TABLE IF EXISTS "cash_reconciliations" CASCADE;
 DROP TABLE IF EXISTS "app_advances" CASCADE;
 DROP TABLE IF EXISTS "expense_payments" CASCADE;
@@ -202,12 +204,44 @@ CREATE TABLE IF NOT EXISTS "cash_reconciliations" (
     "updated_at" timestamp DEFAULT now() NOT NULL
 );
 
+-- 12. TABLA: food_expenses (Tickets Detallados de Comida / Supermercado)
+CREATE TABLE IF NOT EXISTS "food_expenses" (
+    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "household_id" uuid REFERENCES "households"("id") ON DELETE SET NULL,
+    "month" varchar(7) NOT NULL, -- 'YYYY-MM'
+    "store_name" varchar(150) NOT NULL, -- Jumbo, Día, Pigmento, Coto, etc.
+    "amount" numeric(12, 2) NOT NULL,
+    "date" varchar(10) NOT NULL, -- 'YYYY-MM-DD'
+    "payment_method" varchar(50) DEFAULT 'Efectivo' NOT NULL,
+    "is_shared" boolean DEFAULT true NOT NULL,
+    "user_share_pct" numeric(5, 2) DEFAULT '60.00' NOT NULL,
+    "notes" text,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+);
+
+-- 13. TABLA: food_budget_settings (Presupuesto Mensual de Comida)
+CREATE TABLE IF NOT EXISTS "food_budget_settings" (
+    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "month" varchar(7) NOT NULL, -- 'YYYY-MM'
+    "budget_type" varchar(50) DEFAULT 'hybrid' NOT NULL, -- 'budget_only' | 'tickets_only' | 'hybrid'
+    "monthly_budget" numeric(12, 2) DEFAULT '0' NOT NULL,
+    "is_shared" boolean DEFAULT true NOT NULL,
+    "user_share_pct" numeric(5, 2) DEFAULT '60.00' NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+);
+
 -- ==============================================================================
 -- ÍNDICES DE RENDIMIENTO Y UNICIDAD
 -- ==============================================================================
 CREATE UNIQUE INDEX IF NOT EXISTS "daily_logs_user_date_idx" ON "daily_logs" ("user_id", "date");
 CREATE UNIQUE INDEX IF NOT EXISTS "expense_payments_user_month_idx" ON "expense_payments" ("expense_id", "user_id", "month");
 CREATE UNIQUE INDEX IF NOT EXISTS "user_settings_user_key_idx" ON "user_settings" ("user_id", "key");
+CREATE UNIQUE INDEX IF NOT EXISTS "food_budget_user_month_idx" ON "food_budget_settings" ("user_id", "month");
+CREATE INDEX IF NOT EXISTS "food_expenses_user_month_idx" ON "food_expenses" ("user_id", "month");
 CREATE INDEX IF NOT EXISTS "app_advances_user_month_idx" ON "app_advances" ("user_id", "month");
 CREATE INDEX IF NOT EXISTS "cash_reconciliations_user_month_idx" ON "cash_reconciliations" ("user_id", "month");
 

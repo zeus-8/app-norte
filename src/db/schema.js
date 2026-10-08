@@ -195,6 +195,38 @@ export const cashReconciliations = pgTable('cash_reconciliations', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// 12. GASTOS DETALLADOS DE COMIDA / SUPERMERCADO
+export const foodExpenses = pgTable('food_expenses', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  householdId: uuid('household_id').references(() => households.id, { onDelete: 'set null' }),
+  month: varchar('month', { length: 7 }).notNull(), // 'YYYY-MM'
+  storeName: varchar('store_name', { length: 150 }).notNull(), // 'Jumbo', 'Día', 'Pigmento', 'Coto', etc.
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  date: varchar('date', { length: 10 }).notNull(), // 'YYYY-MM-DD'
+  paymentMethod: varchar('payment_method', { length: 50 }).default('Efectivo').notNull(), // 'Efectivo' | 'Débito' | 'VISA' | 'MASTER' | 'Transferencia'
+  isShared: boolean('is_shared').default(true).notNull(),
+  userSharePct: numeric('user_share_pct', { precision: 5, scale: 2 }).default('60.00').notNull(),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// 13. CONFIGURACIÓN DE PRESUPUESTO MENSUAL DE COMIDA
+export const foodBudgetSettings = pgTable('food_budget_settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  month: varchar('month', { length: 7 }).notNull(), // 'YYYY-MM'
+  budgetType: varchar('budget_type', { length: 50 }).default('hybrid').notNull(), // 'budget_only' | 'tickets_only' | 'hybrid'
+  monthlyBudget: numeric('monthly_budget', { precision: 12, scale: 2 }).default('0').notNull(),
+  isShared: boolean('is_shared').default(true).notNull(),
+  userSharePct: numeric('user_share_pct', { precision: 5, scale: 2 }).default('60.00').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  userMonthIdx: uniqueIndex('food_budget_user_month_idx').on(t.userId, t.month),
+}));
+
 // RELACIONES DRIZZLE ORM
 export const usersRelations = relations(users, ({ many }) => ({
   dailyLogs: many(dailyLogs),
@@ -207,6 +239,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   expensePayments: many(expensePayments),
   appAdvances: many(appAdvances),
   cashReconciliations: many(cashReconciliations),
+  foodExpenses: many(foodExpenses),
+  foodBudgets: many(foodBudgetSettings),
 }));
 
 export const householdsRelations = relations(households, ({ one, many }) => ({
@@ -303,3 +337,22 @@ export const cashReconciliationsRelations = relations(cashReconciliations, ({ on
     references: [users.id],
   }),
 }));
+
+export const foodExpensesRelations = relations(foodExpenses, ({ one }) => ({
+  user: one(users, {
+    fields: [foodExpenses.userId],
+    references: [users.id],
+  }),
+  household: one(households, {
+    fields: [foodExpenses.householdId],
+    references: [households.id],
+  }),
+}));
+
+export const foodBudgetSettingsRelations = relations(foodBudgetSettings, ({ one }) => ({
+  user: one(users, {
+    fields: [foodBudgetSettings.userId],
+    references: [users.id],
+  }),
+}));
+

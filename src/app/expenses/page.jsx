@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/components/Navbar';
 import ExpenseModal from '@/components/ExpenseModal';
 import IncreaseModal from '@/components/IncreaseModal';
+import FoodManager from '@/components/FoodManager';
 import { 
   Receipt, 
   CreditCard, 
@@ -20,7 +21,10 @@ import {
   TrendingUp,
   Sparkles,
   Home,
-  Zap
+  Zap,
+  Target,
+  ArrowUpDown,
+  RotateCcw
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -41,12 +45,15 @@ export default function ExpensesPage() {
   const [projections, setProjections] = useState([]);
   const [showProjections, setShowProjections] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'fixed', 'installment', 'shared', 'one_time'
+  const [sortKey, setSortKey] = useState(null); // null (default hierarchy), 'name', 'monthly_amount', 'user_amount', 'dueDay'
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc', 'desc'
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [increaseModalOpen, setIncreaseModalOpen] = useState(false);
   const [increasingExpense, setIncreasingExpense] = useState(null);
   const [loading, setLoading] = useState(true);
   const [togglingPaymentId, setTogglingPaymentId] = useState(null);
+  const [acceptingHousehold, setAcceptingHousehold] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -81,6 +88,24 @@ export default function ExpensesPage() {
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  const handleRespondInvitation = async (householdId, action) => {
+    try {
+      setAcceptingHousehold(true);
+      const res = await fetch('/api/household/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ householdId, action }),
+      });
+      if (res.ok) {
+        await refreshData();
+      }
+    } catch (err) {
+      console.error('Error al responder invitación:', err);
+    } finally {
+      setAcceptingHousehold(false);
+    }
+  };
 
   const handleSaveExpense = async (data) => {
     const url = data.id ? `/api/expenses/${data.id}` : '/api/expenses';
@@ -136,6 +161,17 @@ export default function ExpensesPage() {
   const totalPending = summary.totalPendingAmount !== undefined ? summary.totalPendingAmount : Math.max(0, totalObligations - totalPaid);
   const paidPct = summary.paidPercentage !== undefined ? summary.paidPercentage : (totalObligations > 0 ? Math.round((totalPaid / totalObligations) * 100) : 100);
 
+  // Jerarquía por defecto solicitada:
+  // 1° Compras en cuotas (installment)
+  // 2° Gastos del Hogar (isShared, is_household o categoría Hogar)
+  // 3° Resto de gastos
+  const getExpenseHierarchyScore = (exp) => {
+    if (exp.type === 'installment') return 1;
+    if (exp.category === 'Hogar' || exp.isShared || exp.is_household) return 2;
+    return 3;
+  };
+
+  // Filtrado de gastos
   const filteredExpenses = expenses.filter(exp => {
     if (activeFilter === 'fixed') return exp.type === 'fixed';
     if (activeFilter === 'installment') return exp.type === 'installment';
@@ -145,6 +181,55 @@ export default function ExpensesPage() {
     if (activeFilter === 'paid') return exp.is_paid;
     return true;
   });
+
+  // Ordenamiento interactivo o por jerarquía predeterminada
+  const sortedExpenses = [...filteredExpenses].sort((a, b) => {
+    if (sortKey) {
+      let valA = a[sortKey];
+      let valB = b[sortKey];
+      if (sortKey === 'monthly_amount' || sortKey === 'user_amount' || sortKey === 'totalAmount' || sortKey === 'dueDay') {
+        valA = Number(valA) || 0;
+        valB = Number(valB) || 0;
+      } else {
+        valA = (valA || '').toString().toLowerCase();
+        valB = (valB || '').toString().toLowerCase();
+      }
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    }
+
+    // Por defecto: 1° Cuotas, 2° Hogar, 3° Resto
+    const scoreA = getExpenseHierarchyScore(a);
+    const scoreB = getExpenseHierarchyScore(b);
+    if (scoreA !== scoreB) return scoreA - scoreB;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  const handleToggleSort = (key) => {
+    if (sortKey === key) {
+      if (sortOrder === 'asc') setSortOrder('desc');
+      else {
+        setSortKey(null);
+        setSortOrder('asc');
+      }
+    } else {
+      setSortKey(key);
+      setSortOrder('asc');
+    }
+  };
+
+  // Totales dinámicos del filtro seleccionado
+  const filteredTotalGross = filteredExpenses.reduce((sum, e) => sum + (Number(e.monthly_amount) || 0), 0);
+  const filteredTotalUser = filteredExpenses.reduce((sum, e) => sum + (Number(e.user_amount) || 0), 0);
+  const filteredTotalPaid = filteredExpenses.reduce((sum, e) => sum + (e.is_paid ? (Number(e.user_amount) || 0) : 0), 0);
+  const filteredTotalPending = filteredExpenses.reduce((sum, e) => sum + (!e.is_paid ? (Number(e.user_amount) || 0) : 0), 0);
+
+  // Cálculo de días del mes y Objetivo Diario Base
+  const [yearStr, monthStr] = currentMonth.split('-');
+  const daysInMonth = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10), 0).getDate();
+  const dailyBaseTarget = daysInMonth > 0 ? Math.round(totalObligations / daysInMonth) : 0;
+
 
   return (
     <div className="app-container">
@@ -172,6 +257,67 @@ export default function ExpensesPage() {
           <span>+ Nuevo Gasto o Cuota</span>
         </button>
       </div>
+
+      {/* Banner de Invitaciones de Hogar Pendientes (Aceptación Inmediata con 1 Clic) */}
+      {expensesData?.pendingInvitations?.length > 0 && (
+        <div style={{ marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {expensesData.pendingInvitations.map(inv => (
+            <div 
+              key={inv.membershipId} 
+              className="card"
+              style={{ 
+                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.08) 100%)', 
+                border: '1px solid rgba(245, 158, 11, 0.4)',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 14
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-md)', background: 'rgba(245, 158, 11, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b', flexShrink: 0 }}>
+                  <Home size={22} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>¡Invitación para unirte a &quot;{inv.householdName}&quot;!</span>
+                    <span className="badge badge-amber font-mono" style={{ fontSize: '0.7rem' }}>
+                      {Number(inv.defaultSharePct)}% de gastos asignado
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-main)', marginTop: 2 }}>
+                    Acepta esta invitación para que los gastos compartidos del hogar aparezcan automáticamente en tu tabla y cálculos con tu porcentaje asignado.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  disabled={acceptingHousehold}
+                  onClick={() => handleRespondInvitation(inv.householdId, 'accept')}
+                  className="btn btn-primary"
+                  style={{ background: '#10b981', borderColor: '#10b981', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>{acceptingHousehold ? 'Aceptando...' : 'Aceptar y Ver Gastos'}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={acceptingHousehold}
+                  onClick={() => handleRespondInvitation(inv.householdId, 'decline')}
+                  className="btn btn-secondary"
+                  style={{ color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.4)', fontSize: '0.85rem' }}
+                >
+                  Rechazar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Barra de Progreso de Pagos Mensuales */}
       <div className="card" style={{ marginBottom: 20, background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(14, 165, 233, 0.08) 100%)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
@@ -273,6 +419,20 @@ export default function ExpensesPage() {
             <span>100% de costos compartidos</span>
           </div>
         </div>
+
+        {/* KPI Dorado: Objetivo Diario Base Planificado */}
+        <div className="kpi-card emerald" style={{ border: '1px solid rgba(16, 185, 129, 0.35)', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 182, 212, 0.05) 100%)' }}>
+          <div className="kpi-header">
+            <span className="kpi-label" style={{ color: '#34d399' }}>Objetivo Diario Base</span>
+            <div style={{ color: '#34d399' }}><Target size={20} /></div>
+          </div>
+          <div className="kpi-value font-mono text-emerald">
+            ${dailyBaseTarget.toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>/ día</span>
+          </div>
+          <div className="kpi-subtext">
+            <span>{daysInMonth} días para cubrir ${totalObligations.toLocaleString()}</span>
+          </div>
+        </div>
       </div>
 
       {/* Sección de Proyección Mensual Futura */}
@@ -343,6 +503,9 @@ export default function ExpensesPage() {
         )}
       </div>
 
+      {/* Módulo Especial de Comida & Supermercado */}
+      <FoodManager currentMonth={currentMonth} onFoodChanged={refreshData} />
+
       {/* Filtros */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
         <button 
@@ -366,12 +529,6 @@ export default function ExpensesPage() {
           ✅ Pagados ({expenses.filter(e => e.is_paid).length})
         </button>
         <button 
-          className={`btn btn-sm ${activeFilter === 'fixed' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setActiveFilter('fixed')}
-        >
-          📌 Fijos ({expenses.filter(e => e.type === 'fixed').length})
-        </button>
-        <button 
           className={`btn btn-sm ${activeFilter === 'installment' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveFilter('installment')}
         >
@@ -384,6 +541,12 @@ export default function ExpensesPage() {
           🏠 Hogar / Compartidos ({expenses.filter(e => e.isShared || e.is_household).length})
         </button>
         <button 
+          className={`btn btn-sm ${activeFilter === 'fixed' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveFilter('fixed')}
+        >
+          📌 Fijos ({expenses.filter(e => e.type === 'fixed').length})
+        </button>
+        <button 
           className={`btn btn-sm ${activeFilter === 'one_time' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveFilter('one_time')}
         >
@@ -393,10 +556,64 @@ export default function ExpensesPage() {
 
       {/* Tabla de Gastos */}
       <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
           <h3 className="card-title" style={{ margin: 0 }}>
             <span>Gastos Activos del Mes ({filteredExpenses.length})</span>
           </h3>
+
+          {sortKey && (
+            <button 
+              type="button" 
+              className="btn btn-secondary btn-sm"
+              onClick={() => { setSortKey(null); setSortOrder('asc'); }}
+              style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+              title="Restablecer a la jerarquía predeterminada: 1° Cuotas → 2° Hogar → 3° Resto"
+            >
+              <RotateCcw size={12} />
+              <span>Restablecer Jerarquía</span>
+            </button>
+          )}
+        </div>
+
+        {/* Barra de Totales del Filtro Seleccionado */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          flexWrap: 'wrap', 
+          gap: 12, 
+          padding: '10px 14px', 
+          background: 'rgba(255,255,255,0.02)', 
+          border: '1px solid var(--border-color)', 
+          borderRadius: 'var(--radius-md)', 
+          marginBottom: 14 
+        }}>
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+            Filtro: <strong className="text-white" style={{ textTransform: 'uppercase' }}>{activeFilter}</strong> ({filteredExpenses.length} ítems)
+            {!sortKey ? (
+              <span style={{ marginLeft: 8, color: '#38bdf8', fontSize: '0.74rem' }}>
+                (Orden por defecto: 1° Cuotas → 2° Hogar → 3° Resto)
+              </span>
+            ) : (
+              <span style={{ marginLeft: 8, color: '#c084fc', fontSize: '0.74rem' }}>
+                (Ordenando por: {sortKey === 'name' ? 'Concepto' : (sortKey === 'monthly_amount' ? 'Monto Total' : (sortKey === 'user_amount' ? 'Tu Monto' : sortKey))} {sortOrder === 'asc' ? '↑' : '↓'})
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: '0.82rem' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Total Mensual: </span>
+              <strong className="font-mono text-white">${Math.round(filteredTotalGross).toLocaleString()}</strong>
+            </div>
+            <div style={{ fontSize: '0.82rem', borderLeft: '1px solid var(--border-color)', paddingLeft: 12 }}>
+              <span style={{ color: 'var(--text-muted)' }}>Tu Parte: </span>
+              <strong className="font-mono text-emerald">${Math.round(filteredTotalUser).toLocaleString()}</strong>
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+              (Pagado: <span className="font-mono text-emerald">${Math.round(filteredTotalPaid).toLocaleString()}</span> / Pendiente: <span className="font-mono text-rose">${Math.round(filteredTotalPending).toLocaleString()}</span>)
+            </div>
+          </div>
         </div>
 
         {filteredExpenses.length === 0 ? (
@@ -410,18 +627,45 @@ export default function ExpensesPage() {
               <thead>
                 <tr>
                   <th style={{ width: '46px', textAlign: 'center' }}>¿Pago?</th>
-                  <th>Concepto</th>
+                  <th 
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => handleToggleSort('name')}
+                    title="Clic para ordenar alfabéticamente"
+                  >
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <span>Concepto</span>
+                      <ArrowUpDown size={12} style={{ opacity: sortKey === 'name' ? 1 : 0.4 }} />
+                    </div>
+                  </th>
                   <th>Categoría</th>
                   <th>Tipo / Cuotas</th>
-                  <th>Monto Total/Cuota</th>
+                  <th 
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => handleToggleSort('monthly_amount')}
+                    title="Clic para ordenar por monto mensual"
+                  >
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <span>Monto Total/Cuota</span>
+                      <ArrowUpDown size={12} style={{ opacity: sortKey === 'monthly_amount' ? 1 : 0.4 }} />
+                    </div>
+                  </th>
                   <th>División Hogar</th>
-                  <th>Tu Monto</th>
+                  <th 
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => handleToggleSort('user_amount')}
+                    title="Clic para ordenar por tu monto"
+                  >
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <span>Tu Monto</span>
+                      <ArrowUpDown size={12} style={{ opacity: sortKey === 'user_amount' ? 1 : 0.4 }} />
+                    </div>
+                  </th>
                   <th>Medio Pago</th>
                   <th style={{ textAlign: 'center' }}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredExpenses.map(exp => (
+                {sortedExpenses.map(exp => (
                   <tr key={exp.id} style={{ opacity: exp.is_paid ? 0.78 : 1, transition: 'opacity 0.2s' }}>
                     {/* Checkbox de pago interactivo */}
                     <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
@@ -493,8 +737,8 @@ export default function ExpensesPage() {
                     </td>
 
                     <td>
-                      <span className="badge badge-blue" style={{ fontSize: '0.7rem' }}>
-                        {exp.category}
+                      <span className={`badge ${exp.category === 'Comida / Supermercado' ? 'badge-amber' : 'badge-blue'}`} style={{ fontSize: '0.7rem' }}>
+                        {exp.category === 'Comida / Supermercado' ? '🛒 Comida / Super' : exp.category}
                       </span>
                     </td>
 
@@ -523,14 +767,23 @@ export default function ExpensesPage() {
 
                     <td>
                       {exp.is_household || exp.isShared ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <span className="badge badge-blue font-mono" style={{ fontSize: '0.72rem', width: 'fit-content' }}>
                             <Home size={11} style={{ marginRight: 3 }} />
-                            {exp.user_share_pct || exp.userSharePct}% propio
+                            {exp.user_share_pct || exp.userSharePct}% tu parte
                           </span>
+                          {exp.is_created_by_me ? (
+                            <span style={{ fontSize: '0.68rem', color: '#38bdf8' }}>
+                              👤 Cargado por ti
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.68rem', color: '#c084fc', fontWeight: 700 }}>
+                              👤 Cargado por {exp.created_by_name || 'Pareja'}
+                            </span>
+                          )}
                           {exp.household_name && (
-                            <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
-                              {exp.household_name}
+                            <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>
+                              🏡 {exp.household_name}
                             </span>
                           )}
                         </div>
@@ -602,6 +855,25 @@ export default function ExpensesPage() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr style={{ background: 'rgba(0, 0, 0, 0.45)', fontWeight: 800, borderTop: '2px solid var(--border-color)' }}>
+                  <td colSpan={4} style={{ textAlign: 'right', padding: '12px 14px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                    TOTALES DEL FILTRO ({filteredExpenses.length} ÍTEMS):
+                  </td>
+                  <td className="font-mono text-white" style={{ padding: '12px 14px', fontSize: '0.95rem' }}>
+                    ${Math.round(filteredTotalGross).toLocaleString()}
+                  </td>
+                  <td style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                    {activeFilter === 'shared' ? 'Compartidos' : '—'}
+                  </td>
+                  <td className="font-mono text-emerald" style={{ padding: '12px 14px', fontSize: '1.05rem', fontWeight: 800 }}>
+                    ${Math.round(filteredTotalUser).toLocaleString()}
+                  </td>
+                  <td colSpan={2} style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textAlign: 'center' }}>
+                    Pagado: <strong className="text-emerald">${Math.round(filteredTotalPaid).toLocaleString()}</strong> • Pend: <strong className="text-rose">${Math.round(filteredTotalPending).toLocaleString()}</strong>
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

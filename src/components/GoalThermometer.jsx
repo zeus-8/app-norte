@@ -136,12 +136,21 @@ export default function GoalThermometer({ summaryData }) {
           </div>
         </div>
 
-        {level !== 'surpassed' && calendar.isCurrentMonth && (
-          <div className="badge badge-blue font-mono" style={{ fontSize: '0.85rem', padding: '6px 12px' }}>
-            <span>Objetivo diario: </span>
-            <strong>${dailyTargetNeeded.toLocaleString()} / día</strong>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {goals.dailyBaseTarget > 0 && (
+            <div className="badge badge-green font-mono" style={{ fontSize: '0.82rem', padding: '6px 12px' }} title="Meta fija mensual de producción planificada">
+              <span style={{ opacity: 0.85 }}>Meta base: </span>
+              <strong>${(goals.dailyBaseTarget || 0).toLocaleString()} / día</strong>
+            </div>
+          )}
+
+          {level !== 'surpassed' && calendar.isCurrentMonth && (
+            <div className="badge badge-blue font-mono" style={{ fontSize: '0.82rem', padding: '6px 12px' }} title="Ritmo compensatorio dinámico para días restantes">
+              <span style={{ opacity: 0.85 }}>Ritmo necesario: </span>
+              <strong>${dailyTargetNeeded.toLocaleString()} / día</strong>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

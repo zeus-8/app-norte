@@ -22,7 +22,8 @@ import {
   HelpCircle,
   Home,
   Users,
-  X
+  X,
+  Calendar
 } from 'lucide-react';
 
 const AVAILABLE_APPS = [
@@ -51,6 +52,7 @@ export default function SettingsPage() {
   const [name, setName] = useState('');
   const [driverType, setDriverType] = useState('owner');
   const [activeApps, setActiveApps] = useState(['uber', 'cabify', 'didi']);
+  const [billingCycleStartDay, setBillingCycleStartDay] = useState(1);
   const [telegramChatId, setTelegramChatId] = useState('');
   const [telegramAlertDays, setTelegramAlertDays] = useState(5);
   const [telegramEnabled, setTelegramEnabled] = useState(false);
@@ -76,9 +78,10 @@ export default function SettingsPage() {
   const loadProfile = useCallback(async () => {
     try {
       setLoading(true);
-      const [resProfile, resHousehold] = await Promise.all([
+      const [resProfile, resHousehold, resPref] = await Promise.all([
         fetch('/api/user/profile'),
         fetch('/api/household'),
+        fetch('/api/user/preferences'),
       ]);
 
       if (resProfile.status === 401) {
@@ -101,6 +104,13 @@ export default function SettingsPage() {
       if (resHousehold.ok) {
         const hData = await resHousehold.json();
         setHouseholdData(hData);
+      }
+
+      if (resPref.ok) {
+        const prefData = await resPref.json();
+        if (prefData.billingCycleStartDay !== undefined) {
+          setBillingCycleStartDay(prefData.billingCycleStartDay);
+        }
       }
     } catch (err) {
       console.error('Error al cargar perfil:', err);
@@ -132,22 +142,36 @@ export default function SettingsPage() {
     setErrorMsg('');
 
     try {
-      const res = await fetch('/api/user/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          driverType,
-          activeApps,
-          telegramChatId,
-          telegramAlertDays,
-          telegramEnabled,
+      const [resProfile, resPref] = await Promise.all([
+        fetch('/api/user/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            driverType,
+            activeApps,
+            telegramChatId,
+            telegramAlertDays,
+            telegramEnabled,
+          }),
         }),
-      });
+        fetch('/api/user/preferences', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            billingCycleStartDay: Number(billingCycleStartDay),
+          }),
+        }),
+      ]);
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Error al guardar cambios');
+      const data = await resProfile.json();
+      if (!resProfile.ok) {
+        throw new Error(data.error || 'Error al guardar cambios de perfil');
+      }
+
+      if (!resPref.ok) {
+        const prefErr = await resPref.json();
+        throw new Error(prefErr.error || 'Error al guardar ciclo contable');
       }
 
       setUser(data.user);
@@ -448,6 +472,60 @@ export default function SettingsPage() {
             </div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 12 }}>
               Estas plataformas aparecerán en el modal de carga de jornada diaria.
+            </div>
+          </div>
+
+          {/* Card: Ciclo Contable & Inicio de Mes */}
+          <div className="card" style={{ border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="kpi-icon-wrap" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>
+                  <Calendar size={18} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>Ciclo Contable & Inicio de Mes</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Día de corte para objetivos y gastos</div>
+                </div>
+              </div>
+              <span className="badge badge-yellow font-mono" style={{ fontSize: '0.72rem' }}>
+                DÍA {billingCycleStartDay}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label className="label">Día de Inicio de tu Mes Financiero</label>
+                <select
+                  className="input"
+                  value={billingCycleStartDay}
+                  onChange={(e) => setBillingCycleStartDay(parseInt(e.target.value, 10))}
+                  style={{ fontWeight: 600 }}
+                >
+                  <option value={1}>Día 1 (Mes Calendario habitual: 1 al 30/31)</option>
+                  {Array.from({ length: 27 }, (_, i) => i + 2).map((d) => (
+                    <option key={d} value={d}>
+                      Día {d} (Ciclo del {d} al {d - 1} del mes subsiguiente)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{
+                background: 'rgba(245, 158, 11, 0.08)',
+                border: '1px dashed rgba(245, 158, 11, 0.3)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 14px',
+                fontSize: '0.76rem',
+                color: 'var(--text-dim)',
+                lineHeight: 1.45,
+              }}>
+                <div style={{ color: '#fbbf24', fontWeight: 700, marginBottom: 4 }}>
+                  {billingCycleStartDay === 1
+                    ? '🗓️ Modo Calendario: del día 1 al último día de cada mes.'
+                    : `🗓️ Modo Ciclo Personalizado: del día ${billingCycleStartDay} de este mes al día ${billingCycleStartDay - 1} del mes siguiente.`}
+                </div>
+                Tu <strong>Objetivo Diario Base Planificado</strong> y el cálculo de días restantes se ajustan automáticamente a este día de corte. Ideal si cobrás quincenas o liquidaciones a mitad de mes.
+              </div>
             </div>
           </div>
 
