@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db/index.js';
 import { foodBudgetSettings, foodExpenses, expenses, householdMembers } from '@/db/schema.js';
-import { eq, and, or, sql } from 'drizzle-orm';
+import { eq, and, or, ne, sql } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth.js';
 import { foodBudgetSchema } from '@/lib/validations.js';
 

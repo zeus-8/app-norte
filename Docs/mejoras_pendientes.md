@@ -1,6 +1,6 @@
 # 📋 Mejoras Pendientes — App Norte 2.0 (AutoGastos SaaS)
 
-**Última actualización:** 2026-09-27 (rev. 5)  
+**Última actualización:** 2026-10-08 (rev. 6)  
 **Proyecto:** AutoGastos SaaS (App Norte 2.0)  
 **Repositorio:** `c:\Users\user\Desktop\app-norte2.0`  
 **Responsable:** PM + Equipo de Agentes (Backend, Frontend, UX/UI, Arquitectura, Seguridad, DB, Testing)
@@ -362,6 +362,73 @@ Plan maestro y blueprint de migración integral de la solución AutoGastos SaaS 
 
 ---
 
+### MJ-25 — Implementación Real del Ciclo Contable Personalizado (Fecha de Corte que Redefine el Mes Financiero)
+**Estado:** ⏳ Pendiente  
+**Prioridad:** 🔴 Alta  
+**Agentes:** Backend Laravel · Base de Datos & PostgreSQL 17 · Frontend Blade · UX/UI  
+**Comando sugerido:** `@dev implementacion real ciclo contable MJ-25`
+
+**Descripción:**  
+La app tiene una configuración de **Ciclo Contable** en `/settings` (campo `billingCycleStartDay`) que le permite al usuario definir un día de inicio de su mes financiero distinto al día 1 (ej.: del día 10 al 9 del mes siguiente). Sin embargo, tras un análisis técnico profundo del código se detectó que esta configuración está **parcialmente implementada**: se guarda, se muestra en Settings con texto descriptivo, pero **no redefine los rangos de fechas reales** de ninguna consulta a la base de datos.
+
+**Análisis Técnico Detallado — Brecha Detectada:**
+
+La configuración se guarda en `user_settings` con la clave `billing_cycle_start_day` via `/api/user/preferences/route.js`. La UI en Settings muestra correctamente el texto dinámico:
+> *"Modo Ciclo Personalizado: del día 10 de este mes al día 9 del mes siguiente."*
+
+Pero en `src/lib/summary.js` todas las consultas filtran por mes calendario fijo:
+```js
+// Línea 74 — siempre filtra por YYYY-MM del mes calendario, ignora el ciclo:
+sql`SUBSTRING(${dailyLogs.date}, 1, 7) = ${targetMonth}`
+
+// Línea 66 — siempre divide por días del mes calendario, no del ciclo:
+const dailyBaseTarget = daysInMonth > 0 ? Math.round(totalObligations / daysInMonth) : 0;
+```
+
+**El `billingCycleStartDay` nunca se lee ni se aplica en `summary.js`.** Lo mismo ocurre con `food-expenses/route.js`, `food-budget/route.js`, `daily-logs/route.js` y el cálculo de `daysRemaining` en `summary/route.js`.
+
+**Comportamiento actual vs. comportamiento esperado:**
+
+| Escenario | Comportamiento Actual ❌ | Comportamiento Esperado ✅ |
+|-----------|--------------------------|-----------------------------|
+| Ciclo configurado: del 10 al 9. Jornada cargada el 2-oct. | Aparece en Octubre | Debe aparecer en Septiembre (ciclo sep 10 → oct 9) |
+| Días del ciclo para el objetivo diario | Usa días del mes calendario (30/31) | Debe usar los días reales del ciclo (ej. 30 días del 10-sep al 9-oct) |
+| `daysRemaining` para el ritmo dinámico | Días restantes hasta fin de mes calendario | Días restantes hasta el día de corte del ciclo |
+| Navegador de meses en Dashboard | Muestra "Octubre" | Debería mostrar "Sep 10 → Oct 9" |
+| Gastos y tickets de comida | Filtrados por `YYYY-MM` calendario | Deben incluir los días del ciclo cruzando meses |
+
+**Alcance esperado:**
+- Leer `billing_cycle_start_day` del usuario en `getUserFinancialSummary()` al inicio de cada cálculo.
+- Si `startDay > 1`, calcular el rango real del ciclo:
+  - `cycleStart`: `YYYY-MM-{startDay}` del mes "anterior" al seleccionado
+  - `cycleEnd`: `YYYY-MM-{startDay - 1}` del mes seleccionado
+- Reemplazar el filtro `SUBSTRING(date, 1, 7) = targetMonth` por un filtro `date BETWEEN cycleStart AND cycleEnd` en las consultas de `dailyLogs`, `foodExpenses` y `appAdvances`.
+- Recalcular `daysInMonth` / `daysRemaining` basado en los días reales del ciclo (no del mes calendario).
+- Actualizar el `dailyBaseTarget` y el `dailyTargetNeeded` para que dividan por días del ciclo.
+- En el UI del Dashboard y de Jornadas, cuando el ciclo es personalizado mostrar el rango `Sep 10 → Oct 9` en lugar del nombre del mes.
+- Agregar en `/settings` una descripción más explícita: *"Las jornadas del 1 al 9 de octubre se computarán como parte de Septiembre."*
+- Asegurar retrocompatibilidad: si `startDay === 1`, el comportamiento es idéntico al actual (mes calendario).
+
+**Impacto en los cálculos financieros:**
+- ✅ `Objetivo Diario Base` (Fijo): se recalcula con días reales del ciclo
+- ✅ `Ritmo Dinámico` (daysRemaining): usa días hasta el corte del ciclo
+- ✅ `Gastado Real de Comida` y presupuesto de comida: filtran por rango del ciclo
+- ✅ `Avances de Apps`: se imputan al ciclo correcto
+- ✅ Navegación histórica por ciclo en Dashboard y Jornadas
+
+**Archivos involucrados:**
+- `src/lib/summary.js` — Lógica central de cálculo financiero (cambio más crítico)
+- `src/app/api/summary/route.js` — `daysRemaining` y exposición del rango del ciclo al frontend
+- `src/app/api/daily-logs/route.js` — Filtro de logs por rango de ciclo
+- `src/app/api/food-expenses/route.js` — Filtro de tickets por rango de ciclo
+- `src/app/api/food-budget/route.js` — Cálculo de presupuesto de comida por ciclo
+- `src/app/api/user/preferences/route.js` — Ya implementado (lectura/escritura de `billing_cycle_start_day`)
+- `src/app/settings/page.jsx` — Mejorar descripción explicativa del impacto real
+- `src/app/dashboard/page.jsx` — Mostrar el rango del ciclo activo
+- `src/app/driver/page.jsx` — Mostrar el rango del ciclo en la vista de jornadas
+
+---
+
 ## 🟧 MEDIA PRIORIDAD
 
 ---
@@ -594,6 +661,8 @@ El desarrollador ha establecido una fase de **pruebas exhaustivas continuas** se
   - **MJ-14 (Gráfica de Mínimo e Ideal):** A la espera del boceto visual del desarrollador para replicar con exactitud el gráfico deseado.
   - **MJ-21 (Período de prueba Demo/Trial):** Base fundamental para el modelo de monetización SaaS.
   - **MJ-22 (Admin como sandbox de pruebas):** Limpieza y separación de analíticas operativas vs administrativas.
+- **Ciclo Contable (MJ-25):**
+  - ⚠️ **Funcionalidad a medias — alta prioridad:** La configuración del día de corte se guarda y se muestra en Settings, pero **no afecta ningún filtro real de la BD ni ningún cálculo financiero**. Las jornadas, gastos y objetivos diarios siempre se calculan por mes calendario (1 al 31) independientemente del ciclo configurado. Ver análisis técnico completo en MJ-25.
 
 ---
 

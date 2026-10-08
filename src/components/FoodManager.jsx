@@ -21,14 +21,16 @@ import {
 
 const COMMON_STORES = [
   'Jumbo',
+  'Diarco',
   'Día%',
-  'Pigmento',
   'Coto',
   'Carrefour',
+  'Pigmento',
   'Carnicería',
   'Verdulería',
   'Chino / Barrio',
-  'Farmacity'
+  'Farmacity',
+  'Farmacia'
 ];
 
 const PAYMENT_METHODS = [
