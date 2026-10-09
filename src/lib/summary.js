@@ -196,9 +196,9 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     paymentsMap[p.expenseId] = Boolean(p.isPaid);
   });
 
-  let fixedExpensesUserShare = 0;
-  let installmentsUserShare = 0;
-  let oneTimeUserShare = 0;
+  let personalUserShare = 0;    // fijos/únicos 100% propios (sin hogar)
+  let installmentsUserShare = 0; // cuotas 100% propias (sin hogar)
+  let householdUserShare = 0;   // mi parte del hogar (cualquier tipo)
   let totalPaidObligations = 0;
   const expensesBreakdown = [];
 
@@ -248,9 +248,15 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
         }
       }
 
-      if (exp.type === 'fixed') fixedExpensesUserShare += userShareAmount;
-      else if (exp.type === 'installment') installmentsUserShare += userShareAmount;
-      else oneTimeUserShare += userShareAmount;
+      const isHousehold = Boolean(exp.isShared || exp.householdId);
+
+      if (isHousehold) {
+        householdUserShare += userShareAmount;
+      } else if (exp.type === 'installment') {
+        installmentsUserShare += userShareAmount;
+      } else {
+        personalUserShare += userShareAmount;
+      }
 
       totalPaidObligations += effectivePaidAmount;
 
@@ -271,7 +277,7 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     }
   }
 
-  const totalObligations = fixedExpensesUserShare + installmentsUserShare + oneTimeUserShare;
+  const totalObligations = personalUserShare + installmentsUserShare + householdUserShare;
   const totalPendingObligations = Math.max(0, totalObligations - totalPaidObligations);
   const paidPct = totalObligations > 0 ? Math.min(100, Math.round((totalPaidObligations / totalObligations) * 100)) : 100;
   const freeBalance = netIncome - totalObligations;
@@ -370,9 +376,10 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     otherExpense,
     netIncome,
     appBreakdownTotals,
-    fixedExpensesUserShare,
+    personalUserShare,
     installmentsUserShare,
-    oneTimeUserShare,
+    householdUserShare,
+    oneTimeUserShare: 0, // backward compat (ya incluido en personalUserShare)
     totalObligations,
     totalPaidObligations,
     totalPendingObligations,

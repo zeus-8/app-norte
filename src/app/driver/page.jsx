@@ -6,6 +6,7 @@ import DailyLogModal from '@/components/DailyLogModal';
 import OdometerModal from '@/components/OdometerModal';
 import AppAdvanceModal from '@/components/AppAdvanceModal';
 import CashReconciliationModal from '@/components/CashReconciliationModal';
+import EarningsChart from '@/components/EarningsChart';
 import { 
   Calendar, 
   DollarSign, 
@@ -215,6 +216,15 @@ export default function DriverPage() {
           </div>
         </div>
       </div>
+
+      {/* Gráfico Mixto: Ganancia Diaria vs Metas */}
+      <EarningsChart
+        logs={[...rawLogs].sort((a, b) => a.date.localeCompare(b.date))}
+        dailyBaseTarget={summaryData?.goals?.dailyBaseTarget || 0}
+        dailyTargetNeeded={summaryData?.goals?.dailyTargetNeeded || 0}
+        daysInMonth={summaryData?.calendar?.daysInMonth || 30}
+        currentMonth={currentMonth}
+      />
 
       {/* Sección de Liquidaciones & Adelantos de Apps */}
       <div className="card" style={{ marginBottom: 24, padding: '18px 20px' }}>

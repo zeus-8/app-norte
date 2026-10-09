@@ -152,10 +152,10 @@ export async function GET(request) {
     });
 
     const activeInMonth = [];
-    let totalUserFixed = 0;
-    let totalUserInstallments = 0;
-    let totalUserOneTime = 0;
-    let totalHouseholdAll = 0;
+    let totalUserPersonal = 0;      // fijos/únicos 100% propios (sin hogar)
+    let totalUserInstallments = 0;  // cuotas 100% propias (sin hogar)
+    let totalUserHousehold = 0;     // mi parte de gastos del hogar (cualquier tipo)
+    let totalHouseholdAll = 0;      // monto total bruto del hogar (para info)
     let totalPaidAmount = 0;
 
     for (const exp of allExpenses) {
@@ -213,16 +213,18 @@ export async function GET(request) {
           }
         }
 
-        if (exp.isShared || exp.householdId) {
-          totalHouseholdAll += monthlyAmount;
-        }
+        const isHousehold = Boolean(exp.isShared || exp.householdId);
 
-        if (exp.type === 'fixed') {
-          totalUserFixed += userAmount;
+        if (isHousehold) {
+          // Cubo Hogar: toda la parte del usuario en gastos compartidos (cualquier tipo)
+          totalUserHousehold += userAmount;
+          totalHouseholdAll += monthlyAmount;
         } else if (exp.type === 'installment') {
+          // Cubo Cuotas: cuotas 100% propias
           totalUserInstallments += userAmount;
         } else {
-          totalUserOneTime += userAmount;
+          // Cubo Personal: fijos y únicos 100% propios
+          totalUserPersonal += userAmount;
         }
 
         totalPaidAmount += effectivePaidAmount;
@@ -250,7 +252,7 @@ export async function GET(request) {
       }
     }
 
-    const totalUserMonthlyTarget = totalUserFixed + totalUserInstallments + totalUserOneTime;
+    const totalUserMonthlyTarget = totalUserPersonal + totalUserInstallments + totalUserHousehold;
     const totalPendingAmount = Math.max(0, totalUserMonthlyTarget - totalPaidAmount);
     const paidPercentage = totalUserMonthlyTarget > 0 ? Math.round((totalPaidAmount / totalUserMonthlyTarget) * 100) : 100;
 
@@ -260,11 +262,11 @@ export async function GET(request) {
       pendingInvitations,
       currentUserId: user.id,
       summary: {
-        totalUserFixed,
-        totalUserInstallments,
-        totalUserOneTime,
-        totalUserMonthlyTarget,
-        totalHouseholdAll,
+        totalUserPersonal,        // fijos/únicos 100% propios
+        totalUserInstallments,    // cuotas 100% propias
+        totalUserHousehold,       // mi parte del hogar
+        totalUserMonthlyTarget,   // suma total sin doble conteo
+        totalHouseholdAll,        // bruto del hogar (info)
         totalPaidAmount,
         totalPendingAmount,
         paidPercentage,

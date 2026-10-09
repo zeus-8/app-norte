@@ -5,6 +5,8 @@ import Navbar from '@/components/Navbar';
 import ExpenseModal from '@/components/ExpenseModal';
 import IncreaseModal from '@/components/IncreaseModal';
 import FoodManager from '@/components/FoodManager';
+import ProjectionChart from '@/components/ProjectionChart';
+import LoanSection from '@/components/LoanSection';
 import { 
   Receipt, 
   CreditCard, 
@@ -43,6 +45,7 @@ export default function ExpensesPage() {
 
   const [expensesData, setExpensesData] = useState(null);
   const [projections, setProjections] = useState([]);
+  const [monthLogs, setMonthLogs] = useState([]);
   const [showProjections, setShowProjections] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'fixed', 'installment', 'shared', 'one_time'
   const [sortKey, setSortKey] = useState(null); // null (default hierarchy), 'name', 'monthly_amount', 'user_amount', 'dueDay'
@@ -72,12 +75,14 @@ export default function ExpensesPage() {
   const refreshData = useCallback(async () => {
     try {
       setLoading(true);
-      const [expRes, projRes] = await Promise.all([
+      const [expRes, projRes, logsRes] = await Promise.all([
         fetch(`/api/expenses?month=${currentMonth}`).then(r => r.json()),
         fetch(`/api/expenses/projections?start_month=${currentMonth}&months=12`).then(r => r.json()),
+        fetch(`/api/daily-logs?month=${currentMonth}`).then(r => r.json()),
       ]);
       setExpensesData(expRes);
       if (Array.isArray(projRes)) setProjections(projRes);
+      if (Array.isArray(logsRes?.logs)) setMonthLogs(logsRes.logs);
     } catch (err) {
       console.error(err);
     } finally {
@@ -173,10 +178,11 @@ export default function ExpensesPage() {
 
   // Filtrado de gastos
   const filteredExpenses = expenses.filter(exp => {
-    if (activeFilter === 'fixed') return exp.type === 'fixed';
-    if (activeFilter === 'installment') return exp.type === 'installment';
+    if (activeFilter === 'personal') return !Boolean(exp.isShared || exp.is_household) && exp.type !== 'installment';
+    if (activeFilter === 'fixed') return exp.type === 'fixed' && !Boolean(exp.isShared || exp.is_household);
+    if (activeFilter === 'installment') return exp.type === 'installment' && !Boolean(exp.isShared || exp.is_household);
     if (activeFilter === 'shared') return Boolean(exp.isShared || exp.is_household);
-    if (activeFilter === 'one_time') return exp.type === 'one_time';
+    if (activeFilter === 'one_time') return exp.type === 'one_time' && !Boolean(exp.isShared || exp.is_household);
     if (activeFilter === 'pending') return !exp.is_paid;
     if (activeFilter === 'paid') return exp.is_paid;
     return true;
@@ -390,33 +396,33 @@ export default function ExpensesPage() {
             ${(summary.totalUserInstallments || 0).toLocaleString()}
           </div>
           <div className="kpi-subtext">
-            <span>{expenses.filter(e => e.type === 'installment').length} compras activas</span>
+            <span>{expenses.filter(e => e.type === 'installment' && !e.is_household && !e.isShared).length} cuotas activas propias</span>
           </div>
         </div>
 
         <div className="kpi-card amber">
           <div className="kpi-header">
-            <span className="kpi-label">Tus Gastos Fijos</span>
+            <span className="kpi-label">Gastos Propios</span>
             <div style={{ color: '#fbbf24' }}><Layers size={20} /></div>
           </div>
           <div className="kpi-value font-mono text-amber">
-            ${(summary.totalUserFixed || 0).toLocaleString()}
+            ${(summary.totalUserPersonal || 0).toLocaleString()}
           </div>
           <div className="kpi-subtext">
-            <span>Alquiler, servicios, seguro y personales</span>
+            <span>Fijos y pagos 100% tuyos</span>
           </div>
         </div>
 
         <div className="kpi-card cyan">
           <div className="kpi-header">
-            <span className="kpi-label">Total Gastos del Hogar</span>
+            <span className="kpi-label">Tu Parte del Hogar</span>
             <div style={{ color: '#38bdf8' }}><Home size={20} /></div>
           </div>
           <div className="kpi-value font-mono text-cyan">
-            ${(summary.totalHouseholdAll || 0).toLocaleString()}
+            ${(summary.totalUserHousehold || 0).toLocaleString()}
           </div>
           <div className="kpi-subtext">
-            <span>100% de costos compartidos</span>
+            <span>Gastos compartidos (tu %)</span>
           </div>
         </div>
 
@@ -490,9 +496,21 @@ export default function ExpensesPage() {
                   </div>
 
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <div>Fijos: <strong className="font-mono text-main">${proj.userFixed.toLocaleString()}</strong></div>
-                    <div>Cuotas: <strong className="font-mono text-purple" style={{ color: '#c084fc' }}>${proj.userInstallments.toLocaleString()}</strong></div>
-                    <div style={{ color: 'var(--text-dim)', marginTop: 2 }}>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Propios: </span>
+                      <strong className="font-mono" style={{ color: 'var(--text-main)' }}>${(proj.userPersonal ?? proj.userFixed ?? 0).toLocaleString()}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Cuotas: </span>
+                      <strong className="font-mono" style={{ color: '#c084fc' }}>${proj.userInstallments.toLocaleString()}</strong>
+                    </div>
+                    {proj.userHousehold > 0 && (
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>Hogar: </span>
+                        <strong className="font-mono" style={{ color: '#38bdf8' }}>${proj.userHousehold.toLocaleString()}</strong>
+                      </div>
+                    )}
+                    <div style={{ borderTop: '1px solid var(--border-color)', marginTop: 3, paddingTop: 3, color: 'var(--text-dim)' }}>
                       {proj.activeInstallmentsCount} {proj.activeInstallmentsCount === 1 ? 'cuota activa' : 'cuotas activas'}
                     </div>
                   </div>
@@ -503,8 +521,20 @@ export default function ExpensesPage() {
         )}
       </div>
 
+      {/* Gráfico de Cobertura de Gastos vs Ingresos */}
+      {projections.length > 0 && (
+        <ProjectionChart
+          projections={projections}
+          currentMonth={currentMonth}
+          logs={monthLogs}
+        />
+      )}
+
       {/* Módulo Especial de Comida & Supermercado */}
       <FoodManager currentMonth={currentMonth} onFoodChanged={refreshData} />
+
+      {/* Módulo de Préstamos */}
+      <LoanSection onLoansChanged={refreshData} />
 
       {/* Filtros */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
@@ -532,7 +562,7 @@ export default function ExpensesPage() {
           className={`btn btn-sm ${activeFilter === 'installment' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveFilter('installment')}
         >
-          💳 En Cuotas ({expenses.filter(e => e.type === 'installment').length})
+          💳 En Cuotas ({expenses.filter(e => e.type === 'installment' && !e.isShared && !e.is_household).length})
         </button>
         <button 
           className={`btn btn-sm ${activeFilter === 'shared' ? 'btn-primary' : 'btn-secondary'}`}
@@ -544,7 +574,7 @@ export default function ExpensesPage() {
           className={`btn btn-sm ${activeFilter === 'fixed' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveFilter('fixed')}
         >
-          📌 Fijos ({expenses.filter(e => e.type === 'fixed').length})
+          📌 Fijos Propios ({expenses.filter(e => e.type === 'fixed' && !e.isShared && !e.is_household).length})
         </button>
         <button 
           className={`btn btn-sm ${activeFilter === 'one_time' ? 'btn-primary' : 'btn-secondary'}`}

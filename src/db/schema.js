@@ -227,6 +227,34 @@ export const foodBudgetSettings = pgTable('food_budget_settings', {
   userMonthIdx: uniqueIndex('food_budget_user_month_idx').on(t.userId, t.month),
 }));
 
+// 14. PRÉSTAMOS (Deudas con personas o instituciones)
+export const loans = pgTable('loans', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  lenderName: varchar('lender_name', { length: 255 }).notNull(),      // "Mi hermano", "Banco X"
+  totalAmount: numeric('total_amount', { precision: 12, scale: 2 }).notNull(), // Monto original
+  startDate: varchar('start_date', { length: 10 }).notNull(),           // 'YYYY-MM-DD'
+  // Frecuencia pactada de pago
+  scheduledFrequency: varchar('scheduled_frequency', { length: 20 }).default('monthly').notNull(), // 'daily'|'weekly'|'biweekly'|'monthly'|'none'
+  scheduledAmount: numeric('scheduled_amount', { precision: 12, scale: 2 }).default('0').notNull(), // Cuota pactada (0 = libre)
+  status: varchar('status', { length: 50 }).default('active').notNull(), // 'active'|'paid'|'cancelled'
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// 15. PAGOS DE PRÉSTAMOS (Cada pago o adelanto registrado)
+export const loanPayments = pgTable('loan_payments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  loanId: uuid('loan_id').references(() => loans.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  date: varchar('date', { length: 10 }).notNull(),   // 'YYYY-MM-DD'
+  month: varchar('month', { length: 7 }).notNull(),  // 'YYYY-MM' para filtrar por mes
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // RELACIONES DRIZZLE ORM
 export const usersRelations = relations(users, ({ many }) => ({
   dailyLogs: many(dailyLogs),
@@ -241,6 +269,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   cashReconciliations: many(cashReconciliations),
   foodExpenses: many(foodExpenses),
   foodBudgets: many(foodBudgetSettings),
+  loans: many(loans),
+  loanPayments: many(loanPayments),
 }));
 
 export const householdsRelations = relations(households, ({ one, many }) => ({
@@ -356,3 +386,21 @@ export const foodBudgetSettingsRelations = relations(foodBudgetSettings, ({ one 
   }),
 }));
 
+export const loansRelations = relations(loans, ({ one, many }) => ({
+  user: one(users, {
+    fields: [loans.userId],
+    references: [users.id],
+  }),
+  payments: many(loanPayments),
+}));
+
+export const loanPaymentsRelations = relations(loanPayments, ({ one }) => ({
+  loan: one(loans, {
+    fields: [loanPayments.loanId],
+    references: [loans.id],
+  }),
+  user: one(users, {
+    fields: [loanPayments.userId],
+    references: [users.id],
+  }),
+}));
