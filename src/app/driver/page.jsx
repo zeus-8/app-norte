@@ -124,6 +124,7 @@ export default function DriverPage() {
         user={user}
         currentMonth={currentMonth}
         setCurrentMonth={setCurrentMonth}
+        billingCycle={summaryData?.billingCycle || dailyLogsData?.billingCycle}
         currentOdometer={vehicleData?.current_odometer}
         onOpenDailyModal={() => { setEditingLog(null); setDailyModalOpen(true); }}
         onOpenOdometerModal={() => setOdometerModalOpen(true)}
@@ -132,12 +133,19 @@ export default function DriverPage() {
       {/* Encabezado */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, marginBottom: 20 }}>
         <div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <Smartphone className="text-emerald" size={24} />
             <span>Jornadas y Rendimiento Multiapp</span>
+            {(summaryData?.billingCycle?.isCustom || dailyLogsData?.billingCycle?.isCustom) && (
+              <span className="badge badge-yellow font-mono" style={{ fontSize: '0.75rem' }}>
+                {(summaryData?.billingCycle || dailyLogsData?.billingCycle)?.shortRangeLabel}
+              </span>
+            )}
           </h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Registro diario de Uber, Cabify, DiDi y Rappi con control exacto de horas, minutos y combustible
+            {(summaryData?.billingCycle || dailyLogsData?.billingCycle)?.isCustom
+              ? `Período contable: ${(summaryData?.billingCycle || dailyLogsData?.billingCycle)?.cycleLabel}`
+              : 'Registro diario de Uber, Cabify, DiDi y Rappi con control exacto de horas, minutos y combustible'}
           </p>
         </div>
 
@@ -222,8 +230,10 @@ export default function DriverPage() {
         logs={[...rawLogs].sort((a, b) => a.date.localeCompare(b.date))}
         dailyBaseTarget={summaryData?.goals?.dailyBaseTarget || 0}
         dailyTargetNeeded={summaryData?.goals?.dailyTargetNeeded || 0}
+        targetExpected={summaryData?.goals?.targetExpected || 0}
         daysInMonth={summaryData?.calendar?.daysInMonth || 30}
         currentMonth={currentMonth}
+        billingCycle={summaryData?.billingCycle || dailyLogsData?.billingCycle}
       />
 
       {/* Sección de Liquidaciones & Adelantos de Apps */}

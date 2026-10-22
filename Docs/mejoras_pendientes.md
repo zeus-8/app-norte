@@ -363,10 +363,9 @@ Plan maestro y blueprint de migración integral de la solución AutoGastos SaaS 
 ---
 
 ### MJ-25 — Implementación Real del Ciclo Contable Personalizado (Fecha de Corte que Redefine el Mes Financiero)
-**Estado:** ⏳ Pendiente  
+**Estado:** ✅ Completado (2026-10-22)  
 **Prioridad:** 🔴 Alta  
-**Agentes:** Backend Laravel · Base de Datos & PostgreSQL 17 · Frontend Blade · UX/UI  
-**Comando sugerido:** `@dev implementacion real ciclo contable MJ-25`
+**Agentes:** Backend · Base de Datos & PostgreSQL · Frontend · UX/UI  
 
 **Descripción:**  
 La app tiene una configuración de **Ciclo Contable** en `/settings` (campo `billingCycleStartDay`) que le permite al usuario definir un día de inicio de su mes financiero distinto al día 1 (ej.: del día 10 al 9 del mes siguiente). Sin embargo, tras un análisis técnico profundo del código se detectó que esta configuración está **parcialmente implementada**: se guarda, se muestra en Settings con texto descriptivo, pero **no redefine los rangos de fechas reales** de ninguna consulta a la base de datos.

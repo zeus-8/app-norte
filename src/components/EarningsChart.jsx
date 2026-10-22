@@ -26,58 +26,67 @@ ChartJS.register(
 );
 
 /**
- * EarningsChart — Gráfico mixto Barras + Líneas estilo Uber
+ * EarningsChart — Gráfico mixto Barras + Líneas con soporte completo de Ciclo Contable
  *
  * Props:
- *   logs              []     — dailyLogs del mes (con campo date "YYYY-MM-DD" y net_profit)
- *   dailyBaseTarget   number — Meta fija diaria (obligaciones / días del mes)
- *   dailyTargetNeeded number — Ritmo dinámico actual
- *   daysInMonth       number — Días totales del mes
+ *   logs              []     — dailyLogs del mes/ciclo (con campo date "YYYY-MM-DD" y net_profit)
+ *   dailyBaseTarget   number — Meta fija diaria (obligaciones / días del ciclo)
+ *   dailyTargetNeeded number — Ritmo dinámico actual para días restantes
+ *   targetExpected    number — Total de meta esperada a cubrir en el mes
+ *   daysInMonth       number — Días totales del mes/ciclo
  *   currentMonth      string — "YYYY-MM"
+ *   billingCycle      object — { startDay, startDate, endDate, daysInCycle, dates, isCustom, shortRangeLabel }
  */
 export default function EarningsChart({
   logs = [],
   dailyBaseTarget = 0,
   dailyTargetNeeded = 0,
+  targetExpected = 0,
   daysInMonth = 30,
   currentMonth = '',
+  billingCycle = null,
 }) {
   const now = new Date();
   const fallbackMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const safeMonth = currentMonth || fallbackMonth;
   const [yearStr, monthStr] = safeMonth.split('-');
 
-  const safeDaysInMonth = Number(daysInMonth) > 0 ? Number(daysInMonth) : 30;
+  // ── Determinar lista exacta de fechas del ciclo contable ──────────────────
+  let dates = [];
+  if (billingCycle?.dates?.length > 0) {
+    dates = billingCycle.dates;
+  } else {
+    const totalDays = Number(daysInMonth) > 0 ? Number(daysInMonth) : 30;
+    dates = Array.from({ length: totalDays }, (_, i) => {
+      const day = String(i + 1).padStart(2, '0');
+      return `${yearStr}-${monthStr}-${day}`;
+    });
+  }
 
-  // ── Eje X: todos los días del mes ─────────────────────────────────────────
-  const labels = Array.from({ length: safeDaysInMonth }, (_, i) => {
-    const day = String(i + 1).padStart(2, '0');
-    return `${day}/${monthStr}`;
+  const totalCycleDays = dates.length;
+
+  // ── Eje X Labels: "DD/MM" ─────────────────────────────────────────────────
+  const labels = dates.map(dStr => {
+    const parts = dStr.split('-');
+    return `${parts[2]}/${parts[1]}`;
   });
 
-  // ── Mapear net_profit al número de día ────────────────────────────────────
-  const netByDay = {};
+  // ── Mapear net_profit a la fecha exacta "YYYY-MM-DD" ─────────────────────
+  const netByDate = {};
   logs.forEach(log => {
-    // date puede venir como "YYYY-MM-DD" o "YYYY-MM-DDT..."
-    const dateStr = (log.date || '').substring(0, 10); // garantizar "YYYY-MM-DD"
-    const dayStr = dateStr.slice(8, 10);               // "DD"
-    if (dayStr) {
-      const dayNum = parseInt(dayStr, 10);
-      if (dayNum >= 1 && dayNum <= 31) {
-        netByDay[dayNum] = (netByDay[dayNum] || 0) + Number(log.net_profit || 0);
-      }
+    const dStr = (log.date || '').substring(0, 10);
+    if (dStr) {
+      netByDate[dStr] = (netByDate[dStr] || 0) + Number(log.net_profit || 0);
     }
   });
 
-  const isCurrentMonth =
-    now.getFullYear() === parseInt(yearStr, 10) &&
-    now.getMonth() + 1 === parseInt(monthStr, 10);
-  const currentDay = isCurrentMonth ? now.getDate() : safeDaysInMonth;
+  // ── Identificar el día actual en el ciclo ─────────────────────────────────
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayIdx = dates.indexOf(todayStr);
 
   // ── Dataset 1: BARRAS — ganancia neta por día ─────────────────────────────
-  const barData = labels.map((_, i) => {
-    const dayNum = i + 1;
-    return Object.prototype.hasOwnProperty.call(netByDay, dayNum) ? netByDay[dayNum] : null;
+  const barData = dates.map(dStr => {
+    return Object.prototype.hasOwnProperty.call(netByDate, dStr) ? netByDate[dStr] : null;
   });
 
   const barColors = barData.map(v => {
@@ -96,15 +105,42 @@ export default function EarningsChart({
       : 'rgba(239, 68, 68, 1)';
   });
 
-  // ── Dataset 2: LÍNEA FIJA — tarifa mensual base ───────────────────────────
+  // ── Dataset 2: LÍNEA FIJA — tarifa mensual base de referencia ─────────────
   const fixedLineData = labels.map(() => dailyBaseTarget > 0 ? dailyBaseTarget : null);
 
-  // ── Dataset 3: LÍNEA RITMO — solo desde hoy en adelante ──────────────────
-  const rhythmLineData = labels.map((_, i) => {
-    const dayNum = i + 1;
-    if (dailyTargetNeeded <= 0) return null;
-    return dayNum >= currentDay ? dailyTargetNeeded : null;
-  });
+  // ── Dataset 3: LÍNEA RITMO — Historial completo + Proyección hacia adelante
+  // Reconstruye el ritmo exigido día a día sin borrar el pasado
+  const totalGoal = targetExpected > 0 ? targetExpected : (dailyBaseTarget > 0 ? dailyBaseTarget * totalCycleDays : 0);
+
+  let accumulatedNet = 0;
+  const rhythmLineData = [];
+
+  for (let i = 0; i < totalCycleDays; i++) {
+    const dStr = dates[i];
+    const remainingDays = totalCycleDays - i;
+
+    if (todayIdx >= 0 && i > todayIdx) {
+      // Días futuros en el ciclo activo: proyectar el ritmo actual necesario
+      rhythmLineData.push(dailyTargetNeeded > 0 ? dailyTargetNeeded : 0);
+    } else if (todayIdx >= 0 && i === todayIdx) {
+      // Día de hoy: ritmo actual necesario
+      rhythmLineData.push(dailyTargetNeeded > 0 ? dailyTargetNeeded : (totalGoal > 0 ? Math.max(0, Math.round((totalGoal - accumulatedNet) / remainingDays)) : null));
+      if (netByDate[dStr] !== undefined) {
+        accumulatedNet += Number(netByDate[dStr]);
+      }
+    } else {
+      // Días pasados: mantener exactamente el ritmo que se exigía ese día
+      const neededOnThisDay = totalGoal > 0
+        ? Math.max(0, Math.round((totalGoal - accumulatedNet) / remainingDays))
+        : (dailyBaseTarget > 0 ? dailyBaseTarget : null);
+
+      rhythmLineData.push(neededOnThisDay);
+
+      if (netByDate[dStr] !== undefined) {
+        accumulatedNet += Number(netByDate[dStr]);
+      }
+    }
+  }
 
   // ── Chart.js data ─────────────────────────────────────────────────────────
   const data = {
@@ -139,20 +175,28 @@ export default function EarningsChart({
       },
       {
         type: 'line',
-        label: 'Ritmo Necesario',
+        label: 'Ritmo Necesario (Historial)',
         data: rhythmLineData,
         borderColor: 'rgba(251, 191, 36, 0.95)',
         backgroundColor: 'rgba(251, 191, 36, 0.08)',
         borderWidth: 2.5,
         borderDash: [],
-        pointRadius: 3,
-        pointBackgroundColor: '#fbbf24',
+        pointRadius: (ctx) => {
+          const idx = ctx.dataIndex;
+          if (todayIdx >= 0 && idx === todayIdx) return 6; // Destacar día actual
+          return 3;
+        },
+        pointBackgroundColor: (ctx) => {
+          const idx = ctx.dataIndex;
+          if (todayIdx >= 0 && idx === todayIdx) return '#ffffff';
+          return '#fbbf24';
+        },
         pointBorderColor: '#fbbf24',
-        pointHoverRadius: 6,
-        tension: 0,
+        pointHoverRadius: 7,
+        tension: 0.15,
         fill: false,
         order: 2,
-        spanGaps: false,
+        spanGaps: true,
       },
     ],
   };
@@ -188,7 +232,10 @@ export default function EarningsChart({
         bodyFont: { size: 12, family: "'Inter', sans-serif" },
         callbacks: {
           title(items) {
-            return `📅 ${items[0]?.label || ''}`;
+            const idx = items[0]?.dataIndex;
+            const fullDate = dates[idx] || items[0]?.label || '';
+            const isToday = fullDate === todayStr;
+            return `📅 ${fullDate}${isToday ? ' (HOY)' : ''}`;
           },
           label(ctx) {
             if (ctx.parsed.y === null || ctx.parsed.y === undefined) return null;
@@ -198,12 +245,18 @@ export default function EarningsChart({
               if (dailyBaseTarget > 0) {
                 const diff = val - dailyBaseTarget;
                 const sign = diff >= 0 ? '▲ +' : '▼ ';
-                return `💰 Ganancia: ${fmt(val)}   ${sign}${fmt(Math.abs(diff))} vs meta`;
+                return `💰 Ganancia: ${fmt(val)}   ${sign}${fmt(Math.abs(diff))} vs meta base`;
               }
               return `💰 Ganancia: ${fmt(val)}`;
             }
             if (ctx.dataset.label === 'Meta Fija Mensual') return `📊 Meta Fija: ${fmt(val)}/día`;
-            if (ctx.dataset.label === 'Ritmo Necesario') return `⚡ Ritmo: ${fmt(val)}/día`;
+            if (ctx.dataset.label.includes('Ritmo')) {
+              const idx = ctx.dataIndex;
+              const isPast = todayIdx >= 0 && idx < todayIdx;
+              const isCurrent = todayIdx >= 0 && idx === todayIdx;
+              const suffix = isPast ? ' (exigido en este día)' : isCurrent ? ' (hoy)' : ' (proyectado)';
+              return `⚡ Ritmo Necesario: ${fmt(val)}/día${suffix}`;
+            }
             return `${ctx.dataset.label}: ${fmt(val)}`;
           },
           filter(item) {
@@ -221,8 +274,7 @@ export default function EarningsChart({
           maxRotation: 45,
           minRotation: 0,
           callback(val, index) {
-            const dayNum = index + 1;
-            if (safeDaysInMonth <= 15 || dayNum % 2 === 1) return this.getLabelForValue(val);
+            if (totalCycleDays <= 15 || index % 2 === 0) return this.getLabelForValue(val);
             return '';
           },
         },
@@ -257,13 +309,18 @@ export default function EarningsChart({
         marginBottom: 18,
       }}>
         <div>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            📈 Ganancia Diaria vs Metas del Mes
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span>📈 Ganancia Diaria vs Metas</span>
+            {billingCycle?.isCustom && (
+              <span className="badge badge-yellow font-mono" style={{ fontSize: '0.72rem' }}>
+                {billingCycle.shortRangeLabel || `Día ${billingCycle.startDay} al ${billingCycle.startDay - 1}`}
+              </span>
+            )}
           </h3>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
             Barras = ganancia neta &nbsp;·&nbsp;
             <span style={{ color: '#22d3ee' }}>Cyan = meta fija</span> &nbsp;·&nbsp;
-            <span style={{ color: '#fbbf24' }}>Ámbar = ritmo necesario</span>
+            <span style={{ color: '#fbbf24' }}>Ámbar = ritmo necesario (historial continuo)</span>
           </p>
         </div>
 
@@ -302,9 +359,9 @@ export default function EarningsChart({
             gap: 8,
           }}>
             <span style={{ fontSize: '2rem', opacity: 0.4 }}>📊</span>
-            <p style={{ fontSize: '0.9rem', fontWeight: 600 }}>Sin jornadas registradas este mes</p>
+            <p style={{ fontSize: '0.9rem', fontWeight: 600 }}>Sin jornadas registradas en este período</p>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-              Registrá una jornada para ver el gráfico
+              Registrá una jornada dentro de este ciclo para ver el gráfico
             </p>
           </div>
         ) : (

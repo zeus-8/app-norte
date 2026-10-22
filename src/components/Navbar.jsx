@@ -29,6 +29,7 @@ export default function Navbar({
   user,
   currentMonth,
   setCurrentMonth,
+  billingCycle,
   currentOdometer,
   onOpenDailyModal,
   onOpenExpenseModal,
@@ -100,9 +101,14 @@ export default function Navbar({
             >
               <ChevronLeft size={16} />
             </button>
-            <div style={{ padding: '0 12px', fontSize: '0.85rem', fontWeight: 800, minWidth: 140, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <div style={{ padding: '0 12px', fontSize: '0.85rem', fontWeight: 800, minWidth: 140, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
               <Calendar size={14} className="text-blue" />
               <span>{MONTH_NAMES[monthIdx]} {year}</span>
+              {billingCycle?.isCustom && (
+                <span className="badge badge-yellow font-mono" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>
+                  {billingCycle.shortRangeLabel}
+                </span>
+              )}
             </div>
             <button 
               className="btn btn-secondary btn-sm" 

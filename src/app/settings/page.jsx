@@ -53,10 +53,33 @@ export default function SettingsPage() {
   const [driverType, setDriverType] = useState('owner');
   const [activeApps, setActiveApps] = useState(['uber', 'cabify', 'didi']);
   const [billingCycleStartDay, setBillingCycleStartDay] = useState(1);
+  const [savingCycle, setSavingCycle] = useState(false);
+  const [cycleSavedMsg, setCycleSavedMsg] = useState('');
   const [telegramChatId, setTelegramChatId] = useState('');
   const [telegramAlertDays, setTelegramAlertDays] = useState(5);
   const [telegramEnabled, setTelegramEnabled] = useState(false);
   const [botUsername, setBotUsername] = useState('AutoGastosBot');
+
+  const handleUpdateCycleDay = async (newDay) => {
+    const val = parseInt(newDay, 10);
+    setBillingCycleStartDay(val);
+    setSavingCycle(true);
+    setCycleSavedMsg('');
+    try {
+      const res = await fetch('/api/user/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ billingCycleStartDay: val }),
+      });
+      if (!res.ok) throw new Error('Error al guardar ciclo contable');
+      setCycleSavedMsg('¡Guardado automático exitoso!');
+      setTimeout(() => setCycleSavedMsg(''), 4000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingCycle(false);
+    }
+  };
 
   // Estados de cambio de contraseña
   const [currentPassword, setCurrentPassword] = useState('');
@@ -476,7 +499,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Card: Ciclo Contable & Inicio de Mes */}
-          <div className="card" style={{ border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+          <div className="card" style={{ border: '1px solid rgba(245, 158, 11, 0.35)', background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(15, 23, 42, 0.4) 100%)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div className="kpi-icon-wrap" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>
@@ -484,30 +507,51 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>Ciclo Contable & Inicio de Mes</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Día de corte para objetivos y gastos</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Día de corte para objetivos, jornadas y gastos</div>
                 </div>
               </div>
-              <span className="badge badge-yellow font-mono" style={{ fontSize: '0.72rem' }}>
-                DÍA {billingCycleStartDay}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {savingCycle && (
+                  <span style={{ fontSize: '0.72rem', color: '#fbbf24', fontWeight: 600 }}>Guardando...</span>
+                )}
+                {cycleSavedMsg && (
+                  <span style={{ fontSize: '0.72rem', color: '#34d399', fontWeight: 600 }}>✓ Guardado</span>
+                )}
+                <span className="badge badge-yellow font-mono" style={{ fontSize: '0.72rem' }}>
+                  DÍA {billingCycleStartDay}
+                </span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label className="label">Día de Inicio de tu Mes Financiero</label>
-                <select
-                  className="input"
-                  value={billingCycleStartDay}
-                  onChange={(e) => setBillingCycleStartDay(parseInt(e.target.value, 10))}
-                  style={{ fontWeight: 600 }}
-                >
-                  <option value={1}>Día 1 (Mes Calendario habitual: 1 al 30/31)</option>
-                  {Array.from({ length: 27 }, (_, i) => i + 2).map((d) => (
-                    <option key={d} value={d}>
-                      Día {d} (Ciclo del {d} al {d - 1} del mes subsiguiente)
-                    </option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <select
+                    className="input"
+                    value={billingCycleStartDay}
+                    onChange={(e) => handleUpdateCycleDay(e.target.value)}
+                    style={{ fontWeight: 600, flex: 1, minWidth: 240 }}
+                  >
+                    <option value={1}>Día 1 (Mes Calendario habitual: 1 al 30/31)</option>
+                    {Array.from({ length: 27 }, (_, i) => i + 2).map((d) => (
+                      <option key={d} value={d}>
+                        Día {d} (Ciclo del {d} al {d - 1} del mes subsiguiente)
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateCycleDay(billingCycleStartDay)}
+                    disabled={savingCycle}
+                    className="btn btn-secondary btn-sm"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Save size={14} />
+                    <span>{savingCycle ? 'Guardando...' : 'Guardar Día'}</span>
+                  </button>
+                </div>
               </div>
 
               <div style={{
@@ -517,14 +561,20 @@ export default function SettingsPage() {
                 padding: '12px 14px',
                 fontSize: '0.76rem',
                 color: 'var(--text-dim)',
-                lineHeight: 1.45,
+                lineHeight: 1.5,
               }}>
                 <div style={{ color: '#fbbf24', fontWeight: 700, marginBottom: 4 }}>
                   {billingCycleStartDay === 1
                     ? '🗓️ Modo Calendario: del día 1 al último día de cada mes.'
-                    : `🗓️ Modo Ciclo Personalizado: del día ${billingCycleStartDay} de este mes al día ${billingCycleStartDay - 1} del mes siguiente.`}
+                    : `🗓️ Modo Ciclo Personalizado: del día ${billingCycleStartDay} de cada mes al día ${billingCycleStartDay - 1} del mes siguiente.`}
                 </div>
-                Tu <strong>Objetivo Diario Base Planificado</strong> y el cálculo de días restantes se ajustan automáticamente a este día de corte. Ideal si cobrás quincenas o liquidaciones a mitad de mes.
+                {billingCycleStartDay === 1 ? (
+                  <span>Tu meta y jornadas se calculan por mes calendario estándar (ej: 1 al 31 de octubre).</span>
+                ) : (
+                  <span>
+                    Por ejemplo, tu ciclo financiero de <strong>Octubre</strong> abarca del <strong>{billingCycleStartDay}/10 al {billingCycleStartDay - 1}/11</strong>. Las jornadas que cargues los primeros {billingCycleStartDay - 1} días del mes siguiente se computarán dentro del ciclo activo.
+                  </span>
+                )}
               </div>
             </div>
           </div>

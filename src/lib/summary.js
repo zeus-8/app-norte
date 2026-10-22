@@ -1,6 +1,7 @@
 import { db } from '@/db/index.js';
 import { dailyLogs, expenses, vehicleMaintenance, userSettings, users, households, householdMembers, expensePayments, appAdvances, cashReconciliations, foodExpenses, foodBudgetSettings } from '@/db/schema.js';
 import { eq, and, sql, ne, or, inArray } from 'drizzle-orm';
+import { getBillingCycleRange } from '@/lib/billingCycle.js';
 
 function getMonthDiff(startStr, currentStr) {
   const [startY, startM] = startStr.split('-').map(Number);
@@ -58,20 +59,43 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     targetMonth = new Date().toISOString().slice(0, 7);
   }
 
-  const [yearStr, monthStr] = targetMonth.split('-');
-  const year = parseInt(yearStr, 10);
-  const monthNum = parseInt(monthStr, 10);
-  const daysInMonth = new Date(year, monthNum, 0).getDate();
-  const today = new Date();
-  const isCurrentMonth = today.getFullYear() === year && (today.getMonth() + 1) === monthNum;
-  const currentDay = isCurrentMonth ? today.getDate() : (targetMonth < today.toISOString().slice(0, 7) ? daysInMonth : 1);
-  const daysRemaining = isCurrentMonth ? Math.max(1, daysInMonth - currentDay + 1) : 0;
+  // 0. Obtener día de inicio del ciclo contable del usuario
+  const cycleSetting = await db.query.userSettings.findFirst({
+    where: and(
+      eq(userSettings.userId, userId),
+      eq(userSettings.key, 'billing_cycle_start_day')
+    ),
+  });
+  const billingCycleStartDay = cycleSetting ? parseInt(cycleSetting.value, 10) : 1;
+  const cycleRange = getBillingCycleRange(targetMonth, billingCycleStartDay);
+  const { startDate, endDate, daysInCycle, dates: cycleDates, isCustom, cycleLabel, shortRangeLabel } = cycleRange;
 
-  // 1. Logs de jornadas
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  
+  const isCurrentCycle = todayStr >= startDate && todayStr <= endDate;
+  let currentCycleDay = 1;
+  let daysRemaining = 0;
+
+  if (isCurrentCycle) {
+    const todayIdx = cycleDates.indexOf(todayStr);
+    currentCycleDay = todayIdx >= 0 ? todayIdx + 1 : 1;
+    daysRemaining = Math.max(1, daysInCycle - currentCycleDay + 1);
+  } else if (todayStr > endDate) {
+    currentCycleDay = daysInCycle;
+    daysRemaining = 0;
+  } else {
+    currentCycleDay = 1;
+    daysRemaining = daysInCycle;
+  }
+
+  const daysInMonth = daysInCycle;
+
+  // 1. Logs de jornadas dentro del ciclo contable
   const logs = await db.query.dailyLogs.findMany({
     where: and(
       eq(dailyLogs.userId, userId),
-      sql`SUBSTRING(${dailyLogs.date}, 1, 7) = ${targetMonth}`
+      sql`${dailyLogs.date} >= ${startDate} AND ${dailyLogs.date} <= ${endDate}`
     ),
   });
 
@@ -157,11 +181,14 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     });
   }
 
-  // 4. Adelantos de Apps en el mes (incluye asignación a gastos del mes)
+  // 4. Adelantos de Apps en el ciclo (incluye asignación a gastos del mes)
   const advances = await db.query.appAdvances.findMany({
     where: and(
       eq(appAdvances.userId, userId),
-      eq(appAdvances.month, targetMonth)
+      or(
+        sql`${appAdvances.date} >= ${startDate} AND ${appAdvances.date} <= ${endDate}`,
+        eq(appAdvances.month, targetMonth)
+      )
     ),
   });
 
@@ -295,11 +322,14 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     }
   });
 
-  // 6. Arqueos y Reconciliaciones de Caja del mes
+  // 6. Arqueos y Reconciliaciones de Caja del ciclo
   const reconciliations = await db.query.cashReconciliations.findMany({
     where: and(
       eq(cashReconciliations.userId, userId),
-      eq(cashReconciliations.month, targetMonth)
+      or(
+        sql`${cashReconciliations.date} >= ${startDate} AND ${cashReconciliations.date} <= ${endDate}`,
+        eq(cashReconciliations.month, targetMonth)
+      )
     ),
     orderBy: (cr, { desc }) => [desc(cr.date), desc(cr.createdAt)],
   });
@@ -330,7 +360,10 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
 
   const foodTickets = await db.query.foodExpenses.findMany({
     where: and(
-      eq(foodExpenses.month, targetMonth),
+      or(
+        sql`${foodExpenses.date} >= ${startDate} AND ${foodExpenses.date} <= ${endDate}`,
+        eq(foodExpenses.month, targetMonth)
+      ),
       householdIds.length > 0
         ? or(
             eq(foodExpenses.userId, userId),
@@ -368,6 +401,21 @@ export async function getUserFinancialSummary(userId, targetMonth = null) {
     month: targetMonth,
     daysInMonth,
     daysRemaining,
+    currentDay: currentCycleDay,
+    isCurrentMonth: isCurrentCycle,
+    billingCycle: {
+      startDay: billingCycleStartDay,
+      startDate,
+      endDate,
+      daysInCycle,
+      dates: cycleDates,
+      isCustom,
+      cycleLabel,
+      shortRangeLabel,
+      currentCycleDay,
+      daysRemaining,
+      isCurrentCycle,
+    },
     daysWorked,
     totalMinutesWorked,
     totalTrips,

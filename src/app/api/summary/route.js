@@ -18,6 +18,9 @@ export async function GET(request) {
       month,
       daysInMonth,
       daysRemaining,
+      currentDay,
+      isCurrentMonth,
+      billingCycle,
       daysWorked,
       totalMinutesWorked,
       totalTrips,
@@ -34,13 +37,6 @@ export async function GET(request) {
       paidPct,
       expensesBreakdown,
     } = summary;
-
-    const today = new Date();
-    const [yearStr, monthStr] = targetMonth.split('-');
-    const year = parseInt(yearStr, 10);
-    const monthNum = parseInt(monthStr, 10);
-    const isCurrentMonth = today.getFullYear() === year && (today.getMonth() + 1) === monthNum;
-    const currentDay = isCurrentMonth ? today.getDate() : (targetMonth < today.toISOString().slice(0, 7) ? daysInMonth : 1);
 
     // Provisión recomendada para el auto (solo si es auto propio)
     const autoMonthlyReserveTarget = user.driverType === 'owner' ? 100000 : 0;
@@ -62,7 +58,7 @@ export async function GET(request) {
     const effectiveNetForGoals = Math.max(0, netIncome - directLoss);
 
     // 📌 Objetivo Diario Base (Fijo Lineal de Planificación):
-    // Total obligaciones del mes dividido la cantidad total de días del mes/ciclo
+    // Total obligaciones del mes dividido la cantidad total de días del ciclo
     const dailyBaseTarget = daysInMonth > 0 ? Math.round(totalObligations / daysInMonth) : 0;
 
     const remainingToExpected = Math.max(0, targetExpected - effectiveNetForGoals);
@@ -80,6 +76,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       month: targetMonth,
+      billingCycle,
       calendar: {
         daysInMonth,
         currentDay,

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db/index.js';
-import { appAdvances } from '@/db/schema.js';
+import { appAdvances, userSettings } from '@/db/schema.js';
 import { getCurrentUser } from '@/lib/auth.js';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, or } from 'drizzle-orm';
+import { getBillingCycleRange } from '@/lib/billingCycle.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,10 +15,22 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const month = searchParams.get('month') || new Date().toISOString().slice(0, 7);
 
+    const cycleSetting = await db.query.userSettings.findFirst({
+      where: and(
+        eq(userSettings.userId, user.id),
+        eq(userSettings.key, 'billing_cycle_start_day')
+      ),
+    });
+    const billingCycleStartDay = cycleSetting ? parseInt(cycleSetting.value, 10) : 1;
+    const { startDate, endDate } = getBillingCycleRange(month, billingCycleStartDay);
+
     const advances = await db.query.appAdvances.findMany({
       where: and(
         eq(appAdvances.userId, user.id),
-        eq(appAdvances.month, month)
+        or(
+          sql`${appAdvances.date} >= ${startDate} AND ${appAdvances.date} <= ${endDate}`,
+          eq(appAdvances.month, month)
+        )
       ),
       with: {
         expense: true,

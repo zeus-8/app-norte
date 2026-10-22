@@ -5,10 +5,11 @@ import { eq, and, sql } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth.js';
 import { dailyLogSchema } from '@/lib/validations.js';
 import { syncUserOdometer } from '@/lib/odometer.js';
+import { getBillingCycleRange } from '@/lib/billingCycle.js';
 
 export const dynamic = 'force-dynamic';
 
-// GET: Obtener jornadas de un mes específico (ej: ?month=2026-03)
+// GET: Obtener jornadas de un mes específico respetando el ciclo contable
 export async function GET(request) {
   try {
     const user = await getCurrentUser();
@@ -17,11 +18,22 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const month = searchParams.get('month') || new Date().toISOString().slice(0, 7);
 
-    // Consulta filtrada por usuario y mes
+    // Obtener día de corte del ciclo contable
+    const cycleSetting = await db.query.userSettings.findFirst({
+      where: and(
+        eq(userSettings.userId, user.id),
+        eq(userSettings.key, 'billing_cycle_start_day')
+      ),
+    });
+    const billingCycleStartDay = cycleSetting ? parseInt(cycleSetting.value, 10) : 1;
+    const cycleRange = getBillingCycleRange(month, billingCycleStartDay);
+    const { startDate, endDate } = cycleRange;
+
+    // Consulta filtrada por usuario y rango de ciclo contable
     const logs = await db.query.dailyLogs.findMany({
       where: and(
         eq(dailyLogs.userId, user.id),
-        sql`SUBSTRING(${dailyLogs.date}, 1, 7) = ${month}`
+        sql`${dailyLogs.date} >= ${startDate} AND ${dailyLogs.date} <= ${endDate}`
       ),
       orderBy: (dailyLogs, { desc }) => [desc(dailyLogs.date)],
     });
@@ -63,6 +75,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       month,
+      billingCycle: cycleRange,
       logs: logsWithComputed,
       summary: {
         totalGross,

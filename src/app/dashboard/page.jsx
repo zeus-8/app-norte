@@ -206,6 +206,7 @@ export default function DashboardPage() {
         user={user}
         currentMonth={currentMonth}
         setCurrentMonth={setCurrentMonth}
+        billingCycle={summaryData?.billingCycle}
         currentOdometer={vehicleData?.current_odometer}
         onOpenDailyModal={() => setDailyModalOpen(true)}
         onOpenExpenseModal={() => setExpenseModalOpen(true)}
